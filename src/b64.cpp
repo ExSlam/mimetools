@@ -17,12 +17,17 @@
 // Enhance Base64 features, and rewrite Base64 encode/decode implementation
 // Copyright 2019 by Paul Nankervis <paulnank@hotmail.com>
 
+// Copyright 2024 by ExSlam <https://github.com/ExSlam>
+// Modified by ExSlam on March 16, 2024 to add a function to perserve newline spacing and
+// to add padding at the end of each line before the newline character where required in Base64 encoded output.
+
 #include "PluginInterface.h"
 #include "mimeTools.h"
 #include "b64.h"
 #include "qp.h"
 #include "url.h"
 #include "saml.h"
+#include <stdexcept>
 
 // Base64 encoding decoding - where 8 bit ascii is re-represented using just 64 ascii characters (plus optional padding '=').
 //
@@ -142,7 +147,7 @@ int base64Encode(char *resultString, const char *asciiString, size_t asciiString
 
 int base64Decode(char *resultString, const char *encodedString, size_t encodedStringLength, bool strictFlag, bool whitespaceReset)
 {
-	size_t index; // input string index
+	std::size_t index; // input string index
 
 	int resultLength = 0, // result string length
 		bitField, // assembled bit field (up to 3 ascii characters at a time)
@@ -208,6 +213,101 @@ int base64Decode(char *resultString, const char *encodedString, size_t encodedSt
 			}
 			resultString[resultLength++] = (char)charValue;
 		}
+	}
+	return resultLength;
+}
+
+
+int base64EncodeWithPaddingByLine(std::string& resultString, const char* asciiString, size_t asciiStringLength)
+{
+	std::size_t index; // input string index
+	//size_t lineLength = 0; // current line length
+	int resultLength = 0; // result string length
+	int	bitField, // assembled bit field (up to 3 ascii characters at a time)
+		bitOffset = -1, // offset into bit field (8 bit input: 16, 8, 0 -> 6 bit output: 18, 12, 6, 0)
+		endOffset, // end offset index value
+		charValue; // character value
+
+	for (index = 0; index < asciiStringLength; )
+	{
+		bitField = 0;
+		for (bitOffset = 16; bitOffset >= 0 && index < asciiStringLength; bitOffset -= 8)
+		{
+			charValue = (UCHAR)asciiString[index];
+			if (charValue == '\n' || charValue == '\r')
+			{
+				break;
+			}
+			index++;
+			bitField |= charValue << bitOffset;
+		}
+		endOffset = bitOffset + 3; // end indicator
+		for (bitOffset = 18; bitOffset > endOffset; bitOffset -= 6)
+		{
+			resultString.insert(resultString.end(), base64CharSet[(bitField >> bitOffset) & 0x3f]);
+			resultLength++;
+		}
+
+		while (index < asciiStringLength && (asciiString[index] == '\n' || asciiString[index] == '\r'))
+		{
+			resultString.insert(resultString.end(), asciiString[index++]);
+			resultLength++;
+		}
+	}
+	std::vector<std::size_t> asciiLineLengths;
+	std::vector<std::size_t> resultLineLengths;
+	std::size_t numLines = 0;
+	std::size_t currLineLength = 0;
+	//first calculate the number of characters on each line, besides the newline character for the source string
+	for (std::size_t asciiIndex = 0; asciiIndex < asciiStringLength; asciiIndex++)
+	{
+		if (asciiString[asciiIndex] == '\n' || asciiString[asciiIndex] == '\r')
+		{
+			numLines++;
+			asciiLineLengths.push_back(currLineLength + 1);
+			currLineLength = 0;
+		}
+		else {
+			currLineLength++;
+		}
+
+	}
+	numLines = 0;
+	currLineLength = 0;
+	//calculate the number of characters on each line, besides the newline character for the encoded base64 string
+	for (std::size_t resultIndex = 0; resultIndex < resultLength; resultIndex++)
+	{
+		if (resultString[resultIndex] == '\n' || resultString[resultIndex] == '\r')
+		{
+			numLines++;
+			resultLineLengths.push_back(currLineLength + 1);
+			currLineLength = 0;
+		}
+		else {
+			currLineLength++;
+		}
+	}
+	std::size_t currPos = 0uLL;
+	//basically the number of lines in the input and output strings;
+	//resultLineLengths and asciiLineLengths have the same size, so this check should be ok
+	for (std::size_t i = 0; i < numLines; i++)
+	{
+		//position of the character before the newline character
+		currPos += resultLineLengths[i] - 1;
+		if ((asciiLineLengths[i] - 1) % 3 != 0)
+		{
+			//length of the current line minus the line break character
+			std::size_t currentLineLength = resultLineLengths[i] - 1;
+			//use the remainder to calculate how much padding the base64 string requires.
+			//reduce (4 - ((currentLineLength) % 4)) to bitwise operation
+			int paddingLength = (4 - ((currentLineLength) & 3));
+			resultString.insert(currPos, paddingLength, '=');
+			//Add the padding amount
+			currPos += paddingLength;
+			resultLength += paddingLength;
+		}
+		//need the +1 at the end to account for the '\n' or '\r' characters. 
+		currPos++;
 	}
 	return resultLength;
 }
