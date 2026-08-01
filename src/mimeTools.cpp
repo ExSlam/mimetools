@@ -97,16 +97,16 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			
 			lstrcpy(funcItem[19]._itemName, TEXT("-SEPARATOR-"));
 
+			lstrcpy(funcItem[23]._itemName, TEXT("URL Base64 Encode"));
+			lstrcpy(funcItem[24]._itemName, TEXT("URL Base64 Decode"));
+
+			lstrcpy(funcItem[19]._itemName, TEXT("-SEPARATOR-"));
+    
 			lstrcpy(funcItem[20]._itemName, TEXT("SAML Decode"));
 			
 			lstrcpy(funcItem[21]._itemName, TEXT("-SEPARATOR-"));
 
 			lstrcpy(funcItem[22]._itemName, TEXT("About"));
-
-			lstrcpy(funcItem[23]._itemName, TEXT("URL Base64 Encode"));
-			lstrcpy(funcItem[24]._itemName, TEXT("URL Base64 Decode"));
-
-
 
 			funcItem[0]._init2Check = false;
 			funcItem[1]._init2Check = false;
