@@ -63,13 +63,16 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			funcItem[18]._pFunc = convertURLDecode;
 			
 			funcItem[19]._pFunc = NULL;
+    
+    		funcItem[23]._pFunc = urlconvertToBase64FromAscii;
+			funcItem[24]._pFunc = urlconvertToAsciiFromBase64;
+
+			funcItem[25]._pFunc = NULL;
+
 			funcItem[20]._pFunc = convertSamlDecode;
 
 			funcItem[21]._pFunc = NULL;
 			funcItem[22]._pFunc = about;
-			funcItem[23]._pFunc = urlconvertToBase64FromAscii;
-			funcItem[24]._pFunc = urlconvertToAsciiFromBase64;
-
 
 			lstrcpy(funcItem[0]._itemName, TEXT("Base64 Encode"));
 			lstrcpy(funcItem[1]._itemName, TEXT("Base64 Encode with padding"));
@@ -100,7 +103,7 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			lstrcpy(funcItem[23]._itemName, TEXT("URL Base64 Encode"));
 			lstrcpy(funcItem[24]._itemName, TEXT("URL Base64 Decode"));
 
-			lstrcpy(funcItem[19]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[25]._itemName, TEXT("-SEPARATOR-"));
     
 			lstrcpy(funcItem[20]._itemName, TEXT("SAML Decode"));
 			
