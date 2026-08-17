@@ -1,4 +1,4 @@
-// This file is part of Notepad++ plugin MIME Tools project
+﻿// This file is part of Notepad++ plugin MIME Tools project
 // Copyright (C)2023 Don HO <don.h@free.fr>
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,6 +16,9 @@
 
 // Enhance Base64 features, and rewrite Base64 encode/decode implementation
 // Copyright 2019 by Paul Nankervis <paulnank@hotmail.com>
+
+#include <vector>
+#include <climits>
 
 #include "PluginInterface.h"
 #include "mimeTools.h"
@@ -66,7 +69,7 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			funcItem[22]._pFunc = urlconvertToBase64FromAscii;
 			funcItem[23]._pFunc = urlconvertToAsciiFromBase64;
 			funcItem[24]._pFunc = NULL;
-\n			funcItem[25]._pFunc = convertSamlDecode;
+			funcItem[25]._pFunc = convertSamlDecode;
 			funcItem[26]._pFunc = NULL;
 			funcItem[27]._pFunc = about;
 			lstrcpy(funcItem[0]._itemName, TEXT("Base64 Encode"));
@@ -94,7 +97,7 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			lstrcpy(funcItem[22]._itemName, TEXT("URL Base64 Encode"));
 			lstrcpy(funcItem[23]._itemName, TEXT("URL Base64 Decode"));
 			lstrcpy(funcItem[24]._itemName, TEXT("-SEPARATOR-"));
-\n			lstrcpy(funcItem[25]._itemName, TEXT("SAML Decode"));
+			lstrcpy(funcItem[25]._itemName, TEXT("SAML Decode"));
 			lstrcpy(funcItem[26]._itemName, TEXT("-SEPARATOR-"));
 			lstrcpy(funcItem[27]._itemName, TEXT("About"));
 
@@ -179,107 +182,224 @@ HWND getCurrentScintillaHandle()
 void convertAsciiToBase64(size_t wrapLength, bool padFlag, bool byLineFlag)
 {
 	HWND hCurrScintilla = getCurrentScintillaHandle();
-	size_t nbSelections = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
-	if (nbSelections > 1) return;
 
-	size_t selectedLength = ::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, 0);
-	if (selectedLength == 0) return;
+	size_t nbSelections =
+		::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
 
-	char *selectedText = new char[selectedLength + 1];
+	if (nbSelections > 1)
+		return;
+
+	size_t selectedLength =
+		::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, 0);
+
+	if (selectedLength == 0)
+		return;
+
+	std::vector<char> selectedText(selectedLength + 1);
+
 	::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-	::SendMessage(hCurrScintilla, SCI_GETTARGETTEXT, 0, (LPARAM)selectedText);
+	::SendMessage(
+		hCurrScintilla,
+		SCI_GETTARGETTEXT,
+		0,
+		reinterpret_cast<LPARAM>(selectedText.data())
+	);
 
-	size_t bufferLength = (selectedLength + 2) / 3 * 4 + 1;
-	if (wrapLength > 0)
+	/*
+	 * Padded-per-line already uses the std::string implementation.
+	 * Do not allocate/copy another temporary output buffer.
+	 */
+	if (padFlag && byLineFlag)
 	{
-		bufferLength += bufferLength / wrapLength;
-	}
-
-	char *encodedText = new char[bufferLength + 1];
-	int len;
-
-	if (padFlag && byLineFlag) 
-	{
-		delete[] encodedText;
 		std::string encodedString;
-		encodedString.reserve((selectedLength / 3 + 1) * 4);
-		len = base64EncodeWithPaddingByLine(encodedString, selectedText, selectedLength);
-		//encodedText = encodedString.c_str();
-		encodedText = new char[len];
-		encodedString.copy(encodedText, len);
-	}
-	else {
-		len = base64Encode(encodedText, selectedText, selectedLength, wrapLength, padFlag, byLineFlag);
-		encodedText[len] = '\0';
-	}
-    ::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-    ::SendMessage(hCurrScintilla, SCI_REPLACETARGET, len, (LPARAM)encodedText);
 
-	delete[] selectedText;
-	delete[] encodedText;
+		int len = base64EncodeWithPaddingByLine(
+			encodedString,
+			selectedText.data(),
+			selectedLength
+		);
 
+		if (len < 0)
+		{
+			::MessageBox(
+				nppData._nppHandle,
+				TEXT("Input is too large to encode."),
+				TEXT("Base64"),
+				MB_OK | MB_ICONERROR
+			);
+			return;
+		}
+
+		::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
+		::SendMessage(
+			hCurrScintilla,
+			SCI_REPLACETARGET,
+			len,
+			reinterpret_cast<LPARAM>(encodedString.data())
+		);
+
+		return;
+	}
+
+	size_t bufferLength;
+
+	if (byLineFlag)
+	{
+		/*
+		 * Unpadded Base64 encoding of a one-byte line produces
+		 * two output bytes. CR/LF bytes are copied unchanged.
+		 *
+		 * Therefore 2 * input length is a safe upper bound.
+		 */
+		bufferLength = selectedLength * 2 + 1;
+	}
+	else
+	{
+		/*
+		 * Standard padded Base64 upper bound.
+		 */
+		const size_t baseLength =
+			((selectedLength + 2) / 3) * 4;
+
+		size_t lineBreaks = 0;
+
+		if (wrapLength > 0 && baseLength > 0)
+			lineBreaks = (baseLength - 1) / wrapLength;
+
+		bufferLength =
+			baseLength +
+			lineBreaks +
+			1;
+	}
+
+	std::vector<char> encodedText(bufferLength);
+
+	int len = base64Encode(
+		encodedText.data(),
+		selectedText.data(),
+		selectedLength,
+		wrapLength,
+		padFlag,
+		byLineFlag
+	);
+
+	if (len < 0 ||
+		static_cast<size_t>(len) > encodedText.size())
+	{
+		::MessageBox(
+			nppData._nppHandle,
+			TEXT("Base64 output exceeded the allocated buffer."),
+			TEXT("Base64"),
+			MB_OK | MB_ICONERROR
+		);
+		return;
+	}
+
+	::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
+	::SendMessage(
+		hCurrScintilla,
+		SCI_REPLACETARGET,
+		len,
+		reinterpret_cast<LPARAM>(encodedText.data())
+	);
 }
 
-void urlconvertAsciiToBase64(size_t wrapLength, bool padFlag, bool byLineFlag)
+void urlconvertAsciiToBase64(size_t /*wrapLength*/, bool /*padFlag*/, bool /*byLineFlag*/)
 {
 	HWND hCurrScintilla = getCurrentScintillaHandle();
-	size_t nbSelections = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
-	if (nbSelections > 1) return;
 
-	size_t selectedLength = ::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, 0);
-	if (selectedLength == 0) return;
+	const size_t nbSelections =
+		::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
 
-	char* selectedText = new char[selectedLength + 1];
-	::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-	::SendMessage(hCurrScintilla, SCI_GETTARGETTEXT, 0, (LPARAM)selectedText);
+	if (nbSelections > 1)
+		return;
 
-	size_t bufferLength = (selectedLength + 2) / 3 * 4 + 1;
-	if (wrapLength > 0)
+	const size_t selectedLength =
+		::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, 0);
+
+	if (selectedLength == 0)
+		return;
+
+	// SCI_GETSELTEXT appends a terminating NUL, so allocate one extra byte.
+	std::vector<char> selectedText(selectedLength + 1);
+
+	::SendMessage(
+		hCurrScintilla,
+		SCI_GETSELTEXT,
+		0,
+		reinterpret_cast<LPARAM>(selectedText.data())
+	);
+
+	/*
+	 * Unpadded Base64URL output length:
+	 *
+	 * 3 input bytes -> 4 output bytes
+	 * 1 remaining byte -> 2 output bytes
+	 * 2 remaining bytes -> 3 output bytes
+	 */
+	const size_t fullGroups = selectedLength / 3;
+	const size_t remainder = selectedLength % 3;
+	const size_t tailLength =
+		remainder == 0 ? 0 : remainder + 1;
+
+	/*
+	 * base64UrlEncode() returns int, so reject an input whose encoded
+	 * result cannot be represented by that API.
+	 *
+	 * This check is performed before multiplying by 4, so the size_t
+	 * calculation cannot overflow.
+	 */
+	if (fullGroups >
+		(static_cast<size_t>(INT_MAX) - tailLength) / 4)
 	{
-		bufferLength += bufferLength / wrapLength;
+		::MessageBox(
+			nppData._nppHandle,
+			TEXT("The selected text is too large to Base64URL encode."),
+			TEXT("Base64URL"),
+			MB_OK | MB_ICONERROR
+		);
+
+		return;
 	}
-	char* encodedText = new char[bufferLength + 1];
 
-	int len = base64Encode(encodedText, selectedText, selectedLength, wrapLength, padFlag, byLineFlag);
+	const size_t encodedLength =
+		fullGroups * 4 + tailLength;
 
-	if (len > 0)
+	std::vector<char> encodedText(encodedLength);
+
+	const int len = base64UrlEncode(
+		encodedText.data(),
+		selectedText.data(),
+		selectedLength
+	);
+
+	if (len < 0 ||
+		static_cast<size_t>(len) != encodedLength)
 	{
-		//2. Encode based on BASE64 as follows
-		//2.1 Remove the trailing "="
-		if ('=' == encodedText[len - 2])
-		{
-			encodedText[len - 2] = '\0';
-			len = len - 2;
-		}
-		else if ('=' == encodedText[len - 1])
-		{
-			encodedText[len - 1] = '\0';
-			len = len - 1;
-		}
-		// 2.2) Replace "+" with "-"
-		// 2.3) Replace "/" with "_"
-		for (int i = 0; i < len; i++)
-		{
-			if ('+' == encodedText[i])
-				encodedText[i] = '-';
-			else if ('/' == encodedText[i])
-				encodedText[i] = '_';
-		}
+		::MessageBox(
+			nppData._nppHandle,
+			TEXT("Base64URL encoding failed."),
+			TEXT("Base64URL"),
+			MB_OK | MB_ICONERROR
+		);
+
+		return;
 	}
 
+	::SendMessage(
+		hCurrScintilla,
+		SCI_TARGETFROMSELECTION,
+		0,
+		0
+	);
 
-
-
-	encodedText[len] = '\0';
-
-	::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-	::SendMessage(hCurrScintilla, SCI_REPLACETARGET, len, (LPARAM)encodedText);
-
-	delete[] selectedText;
-	delete[] encodedText;
-
+	::SendMessage(
+		hCurrScintilla,
+		SCI_REPLACETARGET,
+		static_cast<WPARAM>(len),
+		reinterpret_cast<LPARAM>(encodedText.data())
+	);
 }
-
 
 void convertToBase64FromAscii()
 {
@@ -315,33 +435,77 @@ void convertToBase64FromAscii_byline()
 void convertBase64ToAscii(bool strictFlag, bool whitespaceReset)
 {
 	HWND hCurrScintilla = getCurrentScintillaHandle();
-	size_t nbSelections = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
-	if (nbSelections > 1) return;
-	size_t selectedLength = ::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, 0);
-	if (selectedLength == 0) return;
 
-	char *selectedText = new char[selectedLength + 1];
-	::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-	::SendMessage(hCurrScintilla, SCI_GETTARGETTEXT, 0, (LPARAM)selectedText);
+	size_t nbSelections = ::SendMessage(
+		hCurrScintilla,
+		SCI_GETSELECTIONS,
+		0,
+		0
+	);
 
-	char *decodedText = new char[selectedLength];
+	if (nbSelections > 1)
+		return;
 
-	int len = base64Decode(decodedText, selectedText, selectedLength, strictFlag, whitespaceReset);
+	size_t selectedLength = ::SendMessage(
+		hCurrScintilla,
+		SCI_GETSELTEXT,
+		0,
+		0
+	);
+
+	if (selectedLength == 0)
+		return;
+
+	std::vector<char> selectedText(selectedLength + 1);
+	std::vector<char> decodedText(selectedLength + 1);
+
+	::SendMessage(
+		hCurrScintilla,
+		SCI_TARGETFROMSELECTION,
+		0,
+		0
+	);
+
+	::SendMessage(
+		hCurrScintilla,
+		SCI_GETTARGETTEXT,
+		0,
+		reinterpret_cast<LPARAM>(selectedText.data())
+	);
+
+	int len = base64Decode(
+		decodedText.data(),
+		selectedText.data(),
+		selectedLength,
+		strictFlag,
+		whitespaceReset
+	);
 
 	if (len < 0)
 	{
-		::MessageBox(nppData._nppHandle, TEXT("Problem!"), TEXT("Base64"), MB_OK);
-	}
-	else
-	{
-		decodedText[len] = '\0';
-		::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-        ::SendMessage(hCurrScintilla, SCI_REPLACETARGET, len, (LPARAM)decodedText);
+		::MessageBox(
+			nppData._nppHandle,
+			TEXT("Problem!"),
+			TEXT("Base64"),
+			MB_OK | MB_ICONERROR
+		);
+
+		return;
 	}
 
-	delete[] selectedText;
-	delete[] decodedText;
+	::SendMessage(
+		hCurrScintilla,
+		SCI_TARGETFROMSELECTION,
+		0,
+		0
+	);
 
+	::SendMessage(
+		hCurrScintilla,
+		SCI_REPLACETARGET,
+		len,
+		reinterpret_cast<LPARAM>(decodedText.data())
+	);
 }
 
 
@@ -350,53 +514,47 @@ void urlconvertBase64ToAscii(bool strictFlag, bool whitespaceReset)
 	HWND hCurrScintilla = getCurrentScintillaHandle();
 	size_t nbSelections = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
 	if (nbSelections > 1) return;
+
 	size_t selectedLength = ::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, 0);
 	if (selectedLength == 0) return;
 
-	char* selectedText = new char[selectedLength + 1];
+	std::vector<char> selectedText(selectedLength + 1);
+	std::vector<char> decodedText(selectedLength + 1);
+
 	::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-	::SendMessage(hCurrScintilla, SCI_GETTARGETTEXT, 0, (LPARAM)selectedText);
+	::SendMessage(
+		hCurrScintilla,
+		SCI_GETTARGETTEXT,
+		0,
+		reinterpret_cast<LPARAM>(selectedText.data())
+	);
 
-	char* decodedText = new char[selectedLength];
-
-
-
-	char* pTmpBuffer = (char*)malloc((selectedLength + 10) * sizeof(char));
-	memcpy(pTmpBuffer, selectedText, selectedLength);
-	//1. Decode the BASE64URL encoding as follows:
-	//  1) Replace "-" with "+".
-	//  2) Replace "_" with "/".
-	for (int i = 0; unsigned(i) < selectedLength; i++)
-	{
-		if ('-' == pTmpBuffer[i])
-			pTmpBuffer[i] = '+';
-		else if ('_' == pTmpBuffer[i])
-			pTmpBuffer[i] = '/';
-	}
-
-
-	int len = base64Decode(decodedText, pTmpBuffer, selectedLength, strictFlag, whitespaceReset);
-
-
-
-
-
-	//int len = base64Decode(decodedText, selectedText, selectedLength, strictFlag, whitespaceReset);
+	int len = base64UrlDecode(
+		decodedText.data(),
+		selectedText.data(),
+		selectedLength,
+		strictFlag,
+		whitespaceReset
+	);
 
 	if (len < 0)
 	{
-		::MessageBox(nppData._nppHandle, TEXT("Problem!"), TEXT("Base64"), MB_OK);
-	}
-	else
-	{
-		decodedText[len] = '\0';
-		::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
-		::SendMessage(hCurrScintilla, SCI_REPLACETARGET, len, (LPARAM)decodedText);
+		::MessageBox(
+			nppData._nppHandle,
+			TEXT("Problem!"),
+			TEXT("Base64URL"),
+			MB_OK
+		);
+		return;
 	}
 
-	delete[] selectedText;
-	delete[] decodedText;
-
+	::SendMessage(hCurrScintilla, SCI_TARGETFROMSELECTION, 0, 0);
+	::SendMessage(
+		hCurrScintilla,
+		SCI_REPLACETARGET,
+		len,
+		reinterpret_cast<LPARAM>(decodedText.data())
+	);
 }
 
 void convertToAsciiFromBase64()
