@@ -275,7 +275,7 @@ int base64EncodeWithPaddingByLine(std::string& resultString, const char* asciiSt
 	numLines = 0;
 	currLineLength = 0;
 	//calculate the number of characters on each line, besides the newline character for the encoded base64 string
-	for (std::size_t resultIndex = 0; resultIndex < resultLength; resultIndex++)
+	for (std::size_t resultIndex = 0; resultIndex < static_cast<std::size_t>(resultLength); resultIndex++)
 	{
 		if (resultString[resultIndex] == '\n' || resultString[resultIndex] == '\r')
 		{

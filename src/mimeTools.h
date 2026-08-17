@@ -32,11 +32,13 @@
 #include "url.h"
 
 void convertToBase64FromAscii();
+void urlconvertToBase64FromAscii();
 void convertToBase64FromAscii_pad();
 void convertToBase64FromAscii_B64Format();
 void convertToBase64FromAscii_pad_byline();
 void convertToBase64FromAscii_byline();
 void convertToAsciiFromBase64();
+void urlconvertToAsciiFromBase64();
 void convertToAsciiFromBase64_strict();
 void convertToAsciiFromBase64_whitespaceReset();
 void convertToQuotedPrintable();
