@@ -1,7 +1,5 @@
 // This file is part of Notepad++ plugin MIME Tools project
 // Copyright (C)2023 Don HO <don.h@free.fr>
-// Optimization pass prepared against ExSlam/mimetools master (2e20af5), 2026.
-// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "qp.h"
 

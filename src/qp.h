@@ -1,6 +1,6 @@
 // This file is part of Notepad++ plugin MIME Tools project
 // Copyright (C)2023 Don HO <don.h@free.fr>
-// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <cstddef>

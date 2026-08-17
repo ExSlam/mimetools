@@ -3,8 +3,6 @@
 // Enhance Base64 features, and rewrite Base64 encode/decode implementation
 // Copyright 2019 by Paul Nankervis <paulnank@hotmail.com>
 // Copyright 2024 by ExSlam <https://github.com/ExSlam>
-// Optimization pass prepared against ExSlam/mimetools master (2e20af5), 2026.
-// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "b64.h"
 
