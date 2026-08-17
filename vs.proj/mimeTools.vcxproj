@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|ARM64">
@@ -29,6 +29,7 @@
   <ItemGroup>
     <ClCompile Include="..\src\b64.cpp" />
     <ClCompile Include="..\src\mimeTools.cpp" />
+    <ClCompile Include="..\src\rfc2047.cpp" />
     <ClCompile Include="..\src\qp.cpp" />
     <ClCompile Include="..\src\saml.cpp" />
     <ClCompile Include="..\src\tinflate.c" />
@@ -38,6 +39,7 @@
     <ClInclude Include="..\src\b64.h" />
     <ClInclude Include="..\src\menuCmdID.h" />
     <ClInclude Include="..\src\mimeTools.h" />
+    <ClInclude Include="..\src\rfc2047.h" />
     <ClInclude Include="..\src\Notepad_plus_msgs.h" />
     <ClInclude Include="..\src\PluginInterface.h" />
     <ClInclude Include="..\src\qp.h" />

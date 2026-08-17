@@ -20,8 +20,8 @@
 
 #pragma once
 
-#define VERSION_VALUE "3.2\0"
-#define VERSION_DIGITALVALUE 3, 2, 0, 0
+#define VERSION_VALUE "3.3\0"
+#define VERSION_DIGITALVALUE 3, 3, 0, 0
 
 #define IDD_ABOUTBOX 250
 
@@ -43,6 +43,7 @@ void convertToAsciiFromBase64_strict();
 void convertToAsciiFromBase64_whitespaceReset();
 void convertToQuotedPrintable();
 void convertToAsciiFromQuotedPrintable();
+void convertMimeHeaderDecode();
 void convertURLMinEncode();
 void convertURLEncodeExtended();
 void convertURLFullEncode();

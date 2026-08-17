@@ -1,4 +1,4 @@
-﻿// This file is part of Notepad++ plugin MIME Tools project
+// This file is part of Notepad++ plugin MIME Tools project
 // Copyright (C)2023 Don HO <don.h@free.fr>
 
 // This program is free software: you can redistribute it and/or modify
@@ -23,9 +23,10 @@
 #include "qp.h"
 #include "url.h"
 #include "saml.h"
+#include "rfc2047.h"
 
 const TCHAR PLUGIN_NAME[] = TEXT("MIME Tools");
-const int nbFunc = 26; 
+const int nbFunc = 28; 
 
 HINSTANCE g_hInst = nullptr;
 NppData nppData;
@@ -49,28 +50,25 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			funcItem[6]._pFunc = convertToAsciiFromBase64_strict;
 			funcItem[7]._pFunc = convertToAsciiFromBase64_whitespaceReset;
 			funcItem[8]._pFunc = NULL;
-
 			funcItem[9]._pFunc = convertToQuotedPrintable;
 			funcItem[10]._pFunc = convertToAsciiFromQuotedPrintable;
 			funcItem[11]._pFunc = NULL;
-
-			funcItem[12]._pFunc = convertURLMinEncode;
-			funcItem[13]._pFunc = convertURLMinEncodeByLine;
-			funcItem[14]._pFunc = convertURLEncodeExtended;
-			funcItem[15]._pFunc = convertURLEncodeExtendedByLine;
-			funcItem[16]._pFunc = convertURLFullEncode;
-			funcItem[17]._pFunc = convertURLFullEncodeByLine;
-			funcItem[18]._pFunc = convertURLDecode;
-			funcItem[19]._pFunc = NULL;
-
-			funcItem[20]._pFunc = urlconvertToBase64FromAscii;
-			funcItem[21]._pFunc = urlconvertToAsciiFromBase64;
-			funcItem[22]._pFunc = NULL;
-
-			funcItem[23]._pFunc = convertSamlDecode;
+			funcItem[12]._pFunc = convertMimeHeaderDecode;
+			funcItem[13]._pFunc = NULL;
+			funcItem[14]._pFunc = convertURLMinEncode;
+			funcItem[15]._pFunc = convertURLMinEncodeByLine;
+			funcItem[16]._pFunc = convertURLEncodeExtended;
+			funcItem[17]._pFunc = convertURLEncodeExtendedByLine;
+			funcItem[18]._pFunc = convertURLFullEncode;
+			funcItem[19]._pFunc = convertURLFullEncodeByLine;
+			funcItem[20]._pFunc = convertURLDecode;
+			funcItem[21]._pFunc = NULL;
+			funcItem[22]._pFunc = urlconvertToBase64FromAscii;
+			funcItem[23]._pFunc = urlconvertToAsciiFromBase64;
 			funcItem[24]._pFunc = NULL;
-			funcItem[25]._pFunc = about;
-
+\n			funcItem[25]._pFunc = convertSamlDecode;
+			funcItem[26]._pFunc = NULL;
+			funcItem[27]._pFunc = about;
 			lstrcpy(funcItem[0]._itemName, TEXT("Base64 Encode"));
 			lstrcpy(funcItem[1]._itemName, TEXT("Base64 Encode with padding"));
 			lstrcpy(funcItem[2]._itemName, TEXT("Base64 Encode with padding by line"));
@@ -80,27 +78,25 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			lstrcpy(funcItem[6]._itemName, TEXT("Base64 Decode strict"));
 			lstrcpy(funcItem[7]._itemName, TEXT("Base64 Decode by line"));
 			lstrcpy(funcItem[8]._itemName, TEXT("-SEPARATOR-"));
-
 			lstrcpy(funcItem[9]._itemName, TEXT("Quoted-printable Encode"));
 			lstrcpy(funcItem[10]._itemName, TEXT("Quoted-printable Decode"));
 			lstrcpy(funcItem[11]._itemName, TEXT("-SEPARATOR-"));
-
-			lstrcpy(funcItem[12]._itemName, TEXT("URL Encode (RFC1738)"));
-			lstrcpy(funcItem[13]._itemName, TEXT("URL Encode (RFC1738) by line"));
-			lstrcpy(funcItem[14]._itemName, TEXT("URL Encode (Extended)"));
-			lstrcpy(funcItem[15]._itemName, TEXT("URL Encode (Extended) by line"));
-			lstrcpy(funcItem[16]._itemName, TEXT("URL Encode (Full)"));
-			lstrcpy(funcItem[17]._itemName, TEXT("URL Encode (Full) by line"));
-			lstrcpy(funcItem[18]._itemName, TEXT("URL Decode"));
-			lstrcpy(funcItem[19]._itemName, TEXT("-SEPARATOR-"));
-
-			lstrcpy(funcItem[20]._itemName, TEXT("URL Base64 Encode"));
-			lstrcpy(funcItem[21]._itemName, TEXT("URL Base64 Decode"));
-			lstrcpy(funcItem[22]._itemName, TEXT("-SEPARATOR-"));
-    
-			lstrcpy(funcItem[23]._itemName, TEXT("SAML Decode"));
+			lstrcpy(funcItem[12]._itemName, TEXT("MIME Header Decode (RFC 2047)"));
+			lstrcpy(funcItem[13]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[14]._itemName, TEXT("URL Encode (RFC1738)"));
+			lstrcpy(funcItem[15]._itemName, TEXT("URL Encode (RFC1738) by line"));
+			lstrcpy(funcItem[16]._itemName, TEXT("URL Encode (Extended)"));
+			lstrcpy(funcItem[17]._itemName, TEXT("URL Encode (Extended) by line"));
+			lstrcpy(funcItem[18]._itemName, TEXT("URL Encode (Full)"));
+			lstrcpy(funcItem[19]._itemName, TEXT("URL Encode (Full) by line"));
+			lstrcpy(funcItem[20]._itemName, TEXT("URL Decode"));
+			lstrcpy(funcItem[21]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[22]._itemName, TEXT("URL Base64 Encode"));
+			lstrcpy(funcItem[23]._itemName, TEXT("URL Base64 Decode"));
 			lstrcpy(funcItem[24]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[25]._itemName, TEXT("About"));
+\n			lstrcpy(funcItem[25]._itemName, TEXT("SAML Decode"));
+			lstrcpy(funcItem[26]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[27]._itemName, TEXT("About"));
 
 			for (int i = 0; i < nbFunc; i++)
 			{
@@ -421,6 +417,60 @@ void convertToAsciiFromBase64_strict()
 void convertToAsciiFromBase64_whitespaceReset()
 {
 	convertBase64ToAscii(false, true);
+}
+
+
+void convertMimeHeaderDecode()
+{
+	HWND hCurrScintilla = getCurrentScintillaHandle();
+	const size_t nbSelections = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
+	if (nbSelections > 1) return;
+
+	size_t start = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONSTART, 0, 0);
+	size_t end = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONEND, 0, 0);
+	if (end < start)
+	{
+		const size_t tmp = start;
+		start = end;
+		end = tmp;
+	}
+	const size_t selectedLength = end - start;
+	if (selectedLength == 0) return;
+
+	char* selectedText = new char[selectedLength + 1];
+	::SendMessage(hCurrScintilla, SCI_SETTARGETSTART, start, 0);
+	::SendMessage(hCurrScintilla, SCI_SETTARGETEND, end, 0);
+	::SendMessage(hCurrScintilla, SCI_GETTARGETTEXT, 0, reinterpret_cast<LPARAM>(selectedText));
+
+	std::string decodedText;
+	const unsigned int documentCodePage = static_cast<unsigned int>(
+		::SendMessage(hCurrScintilla, SCI_GETCODEPAGE, 0, 0));
+	const Rfc2047DecodeResult result = decodeRfc2047Header(
+		selectedText, selectedLength, documentCodePage, decodedText);
+
+	if (result.decodedWords == 0)
+	{
+		::MessageBox(nppData._nppHandle,
+			TEXT("No valid RFC 2047 encoded-words were found in the selection."),
+			TEXT("MIME Header Decode"), MB_OK | MB_ICONINFORMATION);
+	}
+	else
+	{
+		::SendMessage(hCurrScintilla, SCI_SETTARGETSTART, start, 0);
+		::SendMessage(hCurrScintilla, SCI_SETTARGETEND, end, 0);
+		::SendMessage(hCurrScintilla, SCI_REPLACETARGET, decodedText.size(),
+			reinterpret_cast<LPARAM>(decodedText.data()));
+		::SendMessage(hCurrScintilla, SCI_SETSEL, start, start + decodedText.size());
+
+		if (result.skippedWords != 0)
+		{
+			::MessageBox(nppData._nppHandle,
+				TEXT("Some malformed, unsupported, or unrepresentable encoded-words were left unchanged."),
+				TEXT("MIME Header Decode"), MB_OK | MB_ICONWARNING);
+		}
+	}
+
+	delete[] selectedText;
 }
 
 void convertURLMinEncode()
