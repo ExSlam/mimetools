@@ -1,313 +1,331 @@
 // This file is part of Notepad++ plugin MIME Tools project
 // Copyright (C)2023 Don HO <don.h@free.fr>
-
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// at your option any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 // Enhance Base64 features, and rewrite Base64 encode/decode implementation
 // Copyright 2019 by Paul Nankervis <paulnank@hotmail.com>
-
 // Copyright 2024 by ExSlam <https://github.com/ExSlam>
-// Modified by ExSlam on March 16, 2024 to add a function to perserve newline spacing and
-// to add padding at the end of each line before the newline character where required in Base64 encoded output.
+// Optimization pass prepared against ExSlam/mimetools master (2e20af5), 2026.
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "PluginInterface.h"
-#include "mimeTools.h"
 #include "b64.h"
-#include "qp.h"
-#include "url.h"
-#include "saml.h"
-#include <stdexcept>
 
-// Base64 encoding decoding - where 8 bit ascii is re-represented using just 64 ascii characters (plus optional padding '=').
-//
-// This code includes options to encode to base64 in multiple ways. For example the text lines:-
-//
-//	If you can keep your head when all about you
-//	Are losing theirs and blaming it on you;
-//
-// Using "Encode with Unix EOL" would produce a single base64 string with line breaks after each 64 characters:-
-//
-//	SWYgeW91IGNhbiBrZWVwIHlvdXIgaGVhZCB3aGVuIGFsbCBhYm91dCB5b3UNCkFy
-//	ZSBsb3NpbmcgdGhlaXJzIGFuZCBibGFtaW5nIGl0IG9uIHlvdTs=
-//
-// That would be decoded using a single base64 decode which ignored whitespace characters (the line breaks).
-//
-// Alternatively the same lines could be encoded using a "by line" option to encode each line of input as
-// its own separate base64 string:-
-//
-//	SWYgeW91IGNhbiBrZWVwIHlvdXIgaGVhZCB3aGVuIGFsbCBhYm91dCB5b3U
-//	QXJlIGxvc2luZyB0aGVpcnMgYW5kIGJsYW1pbmcgaXQgb24geW91Ow
-//
-// Each of these output lines could be decoded separately, or multiple lines decoded using "reset on whitespace"
-// to cause base64 decoding to restart on each line
+#include <climits>
+#include <cstdint>
 
+namespace {
 
-char base64CharSet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-int base64CharMap[] = {	 // base64 values or: -1 for illegal character, -2 to ignore character, and -3 for pad ('=')
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -2, -2, -1, -1, -2, -1, -1,	 // <tab> <lf> & <cr> are ignored
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-	-2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,	 // <space> is ignored
-	52, 53, 54, 55 ,56, 57, 58, 59, 60, 61, -1, -1, -1, -3, -1, -1,	 // '=' is the pad character
-	-1,	 0,	 1,	 2,	 3,	 4,	 5,	 6,	 7,	 8,	 9, 10, 11, 12, 13, 14,
-	15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1 ,-1,
-	-1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-	41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1
-};
+constexpr char kBase64Alphabet[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+constexpr char kBase64UrlAlphabet[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-// base64Encode simply converts ascii to base64 with appropriate wrapping and padding. Encoding is done by loading
-// three ascii characters at a time into a bitField, and then extracting them as four base64 values.
-// returnString is assumed to be large enough to contain the result (which is typically 4 / 3 the input size
-// plus line breaks), and the function return is the length of the result
-// wrapLength sets the length at which to wrap the encoded test at (not valid with byLineFlag)
-// padFlag controls whether the one or two '=' pad characters are included at the end of encoding
-// byLineFlag causes each input line to be encoded as a separate base64 string
+constexpr int kIllegal = -1;
+constexpr int kWhitespace = -2;
+constexpr int kPadding = -3;
 
-int base64Encode(char *resultString, const char *asciiString, size_t asciiStringLength, size_t wrapLength, bool padFlag, bool byLineFlag)
+inline int checkedLength(std::size_t length)
 {
-	size_t index; // input string index
-	size_t lineLength = 0; // current line length
-	int resultLength = 0, // result string length
-		bitField, // assembled bit field (up to 3 ascii characters at a time)
-		bitOffset = -1, // offset into bit field (8 bit input: 16, 8, 0 -> 6 bit output: 18, 12, 6, 0)
-		endOffset, // end offset index value
-		charValue; // character value
-
-	for (index = 0; index < asciiStringLength; )
-	{
-		bitField = 0;
-		for (bitOffset = 16; bitOffset >= 0 && index < asciiStringLength; bitOffset -= 8)
-		{
-			charValue = (UCHAR)asciiString[index];
-			if (byLineFlag && (charValue == '\n' || charValue == '\r'))
-			{
-				break;
-			}
-			index++;
-			bitField |= charValue << bitOffset;
-		}
-		endOffset = bitOffset + 3; // end indicator
-		for (bitOffset = 18; bitOffset > endOffset; bitOffset -= 6)
-		{
-			if (wrapLength > 0 && lineLength++ >= wrapLength && !byLineFlag)
-			{
-				resultString[resultLength++] = '\n';
-				lineLength = 1;
-			}
-			resultString[resultLength++] = base64CharSet[(bitField >> bitOffset) & 0x3f];
-		}
-		if (byLineFlag)
-		{
-			while (index < asciiStringLength && (asciiString[index] == '\n' || asciiString[index] == '\r'))
-			{
-				resultString[resultLength++] = asciiString[index++];
-			}
-		}
-	}
-	if (padFlag && !byLineFlag)
-	{
-		for (; bitOffset >= 0; bitOffset -= 6)
-		{
-			if (wrapLength > 0 && lineLength++ >= wrapLength)
-			{
-				resultString[resultLength++] = '\n';
-				lineLength = 1;
-			}
-			resultString[resultLength++] = '=';
-		}
-	}
-	return resultLength;
+    return length > static_cast<std::size_t>(INT_MAX) ? -1 : static_cast<int>(length);
 }
 
-// base64Decode converts base64 to ascii. But there are choices about what to do with illegal characters or
-// malformed strings. In this version there is a strict flag to indicate that the input must be a single
-// valid base64 string with no illegal characters, no extra padding, and no short segments. Otherwise
-// there is best effort to decode around illegal characters which ARE preserved in the output.
-// So  "TWFyeQ==.aGFk.YQ.bGl0dGxl.bGFtYg=="	 decodes to	 "Mary.had.a.little.lamb"  with five seperate
-// base64 strings decoded, each separated by the illegal character dot. In strict mode the first dot
-// would trigger a fatal error. Some other implementations choose to ignore illegal characters which
-// of course has it's own issues.
-// The four whitespace characters <CR> <LF> <TAB> and <SPACE> are silently ignored unless noWhitespaceFlag
-// is set. In this case whitespace is treated similar to illegal characters and base64 decoding operates
-// around the white space. So "TWFyeQ== aGFk YQ bGl0dGxl bGFtYg==" would decode as "Mary had a little lamb".
-// Decoding is done by loading four base64 characters at a time into a bitField, and then extracting them as
-// three ascii characters.
-// returnString is assumed to be large enough to contain the result (which could be the same size as the input),
-// and the function return is the length of the result, or a negative value in case of an error
-
-int base64Decode(char *resultString, const char *encodedString, size_t encodedStringLength, bool strictFlag, bool whitespaceReset)
+inline int decodeValue(unsigned char c, bool urlSafe)
 {
-	std::size_t index; // input string index
-
-	int resultLength = 0, // result string length
-		bitField, // assembled bit field (up to 3 ascii characters at a time)
-		bitOffset, // offset into bit field (6 bit intput: 18, 12, 6, 0 -> 8 bit output: 16, 8, 0)
-		endOffset, // end offset index value
-		charValue = 0, // character value
-		charIndex = 0, // character index
-		padLength = 0; // pad characters seen
-
-	for (index = 0; index < encodedStringLength; )
-	{
-		bitField = 0;
-		for (bitOffset = 18; bitOffset >= 0 && index < encodedStringLength; )
-		{
-			charValue = (UCHAR)encodedString[index++];
-			charIndex = base64CharMap[charValue & 0x7f];
-			if (charIndex >= 0)
-			{
-				if (padLength > 0 && strictFlag)
-				{
-					return -1; // **ERROR** Data after pad character
-				}
-				bitField |= charIndex << bitOffset;
-				bitOffset -= 6;
-			}
-			else
-			{
-				if (charIndex == -3) // -3 is Pad character '='
-				{
-					padLength++;
-					if (strictFlag && bitOffset > 6)
-					{
-						return -2; // **ERROR** Pad character in wrong place
-					}
-				}
-				else // either -1 for illegal character or -2 for whitespace (ignored)
-				{
-					if (charIndex == -1 || whitespaceReset)
-					{
-						charIndex = -1; // Remember it as an illegal character for copy below
-						break;	// exit loop to deal with illegal character
-					}
-				}
-			}
-		}
-
-		if (strictFlag && bitOffset == 12)
-		{
-			return -3; // **ERROR** Single symbol block not valid
-		}
-		endOffset = bitOffset + 3; // end indicator
-
-		for (bitOffset = 16; bitOffset > endOffset; bitOffset -= 8)
-		{
-			resultString[resultLength++] = (bitField >> bitOffset) & 0xff;
-		}
-
-		if (charIndex == -1) // Was there an illegal character?
-		{
-			if (strictFlag)
-			{
-				return -4; // **ERROR** Bad character in input string
-			}
-			resultString[resultLength++] = (char)charValue;
-		}
-	}
-	return resultLength;
+    // Preserve the legacy decoder's 7-bit lookup semantics for non-ASCII bytes.
+    c &= 0x7f;
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+' || (urlSafe && c == '-')) return 62;
+    if (c == '/' || (urlSafe && c == '_')) return 63;
+    if (c == '=') return kPadding;
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\n') return kWhitespace;
+    return kIllegal;
 }
 
-
-int base64EncodeWithPaddingByLine(std::string& resultString, const char* asciiString, size_t asciiStringLength)
+inline std::size_t encodeBlock(char* out, const unsigned char* in, std::size_t length,
+                               const char* alphabet, bool pad)
 {
-	std::size_t index; // input string index
-	//size_t lineLength = 0; // current line length
-	int resultLength = 0; // result string length
-	int	bitField, // assembled bit field (up to 3 ascii characters at a time)
-		bitOffset = -1, // offset into bit field (8 bit input: 16, 8, 0 -> 6 bit output: 18, 12, 6, 0)
-		endOffset, // end offset index value
-		charValue; // character value
+    std::size_t input = 0;
+    std::size_t output = 0;
 
-	for (index = 0; index < asciiStringLength; )
-	{
-		bitField = 0;
-		for (bitOffset = 16; bitOffset >= 0 && index < asciiStringLength; bitOffset -= 8)
-		{
-			charValue = (UCHAR)asciiString[index];
-			if (charValue == '\n' || charValue == '\r')
-			{
-				break;
-			}
-			index++;
-			bitField |= charValue << bitOffset;
-		}
-		endOffset = bitOffset + 3; // end indicator
-		for (bitOffset = 18; bitOffset > endOffset; bitOffset -= 6)
-		{
-			resultString.insert(resultString.end(), base64CharSet[(bitField >> bitOffset) & 0x3f]);
-			resultLength++;
-		}
+    // Hot path: three input bytes become four output bytes with no branches.
+    while (input + 3 <= length)
+    {
+        const std::uint32_t bits =
+            (static_cast<std::uint32_t>(in[input]) << 16) |
+            (static_cast<std::uint32_t>(in[input + 1]) << 8) |
+            static_cast<std::uint32_t>(in[input + 2]);
+        input += 3;
 
-		while (index < asciiStringLength && (asciiString[index] == '\n' || asciiString[index] == '\r'))
-		{
-			resultString.insert(resultString.end(), asciiString[index++]);
-			resultLength++;
-		}
-	}
-	std::vector<std::size_t> asciiLineLengths;
-	std::vector<std::size_t> resultLineLengths;
-	std::size_t numLines = 0;
-	std::size_t currLineLength = 0;
-	//first calculate the number of characters on each line, besides the newline character for the source string
-	for (std::size_t asciiIndex = 0; asciiIndex < asciiStringLength; asciiIndex++)
-	{
-		if (asciiString[asciiIndex] == '\n' || asciiString[asciiIndex] == '\r')
-		{
-			numLines++;
-			asciiLineLengths.push_back(currLineLength + 1);
-			currLineLength = 0;
-		}
-		else {
-			currLineLength++;
-		}
+        out[output++] = alphabet[(bits >> 18) & 0x3f];
+        out[output++] = alphabet[(bits >> 12) & 0x3f];
+        out[output++] = alphabet[(bits >> 6) & 0x3f];
+        out[output++] = alphabet[bits & 0x3f];
+    }
 
-	}
-	numLines = 0;
-	currLineLength = 0;
-	//calculate the number of characters on each line, besides the newline character for the encoded base64 string
-	for (std::size_t resultIndex = 0; resultIndex < static_cast<std::size_t>(resultLength); resultIndex++)
-	{
-		if (resultString[resultIndex] == '\n' || resultString[resultIndex] == '\r')
-		{
-			numLines++;
-			resultLineLengths.push_back(currLineLength + 1);
-			currLineLength = 0;
-		}
-		else {
-			currLineLength++;
-		}
-	}
-	std::size_t currPos = 0uLL;
-	//basically the number of lines in the input and output strings;
-	//resultLineLengths and asciiLineLengths have the same size, so this check should be ok
-	for (std::size_t i = 0; i < numLines; i++)
-	{
-		//position of the character before the newline character
-		currPos += resultLineLengths[i] - 1;
-		if ((asciiLineLengths[i] - 1) % 3 != 0)
-		{
-			//length of the current line minus the line break character
-			std::size_t currentLineLength = resultLineLengths[i] - 1;
-			//use the remainder to calculate how much padding the base64 string requires.
-			//reduce (4 - ((currentLineLength) % 4)) to bitwise operation
-			int paddingLength = (4 - ((currentLineLength) & 3));
-			resultString.insert(currPos, paddingLength, '=');
-			//Add the padding amount
-			currPos += paddingLength;
-			resultLength += paddingLength;
-		}
-		//need the +1 at the end to account for the '\n' or '\r' characters. 
-		currPos++;
-	}
-	return resultLength;
+    const std::size_t remaining = length - input;
+    if (remaining == 1)
+    {
+        const std::uint32_t bits = static_cast<std::uint32_t>(in[input]) << 16;
+        out[output++] = alphabet[(bits >> 18) & 0x3f];
+        out[output++] = alphabet[(bits >> 12) & 0x3f];
+        if (pad)
+        {
+            out[output++] = '=';
+            out[output++] = '=';
+        }
+    }
+    else if (remaining == 2)
+    {
+        const std::uint32_t bits =
+            (static_cast<std::uint32_t>(in[input]) << 16) |
+            (static_cast<std::uint32_t>(in[input + 1]) << 8);
+        out[output++] = alphabet[(bits >> 18) & 0x3f];
+        out[output++] = alphabet[(bits >> 12) & 0x3f];
+        out[output++] = alphabet[(bits >> 6) & 0x3f];
+        if (pad)
+            out[output++] = '=';
+    }
+
+    return output;
+}
+
+int encodeWrapped(char* resultString, const char* asciiString, std::size_t asciiStringLength,
+                  std::size_t wrapLength, bool padFlag)
+{
+    const auto* input = reinterpret_cast<const unsigned char*>(asciiString);
+    std::size_t inputIndex = 0;
+    std::size_t resultLength = 0;
+    std::size_t lineLength = 0;
+
+    auto put = [&](char c) {
+        if (wrapLength > 0 && lineLength >= wrapLength)
+        {
+            resultString[resultLength++] = '\n';
+            lineLength = 0;
+        }
+        resultString[resultLength++] = c;
+        ++lineLength;
+    };
+
+    while (inputIndex + 3 <= asciiStringLength)
+    {
+        const std::uint32_t bits =
+            (static_cast<std::uint32_t>(input[inputIndex]) << 16) |
+            (static_cast<std::uint32_t>(input[inputIndex + 1]) << 8) |
+            static_cast<std::uint32_t>(input[inputIndex + 2]);
+        inputIndex += 3;
+
+        put(kBase64Alphabet[(bits >> 18) & 0x3f]);
+        put(kBase64Alphabet[(bits >> 12) & 0x3f]);
+        put(kBase64Alphabet[(bits >> 6) & 0x3f]);
+        put(kBase64Alphabet[bits & 0x3f]);
+    }
+
+    const std::size_t remaining = asciiStringLength - inputIndex;
+    if (remaining == 1)
+    {
+        const std::uint32_t bits = static_cast<std::uint32_t>(input[inputIndex]) << 16;
+        put(kBase64Alphabet[(bits >> 18) & 0x3f]);
+        put(kBase64Alphabet[(bits >> 12) & 0x3f]);
+        if (padFlag)
+        {
+            put('=');
+            put('=');
+        }
+    }
+    else if (remaining == 2)
+    {
+        const std::uint32_t bits =
+            (static_cast<std::uint32_t>(input[inputIndex]) << 16) |
+            (static_cast<std::uint32_t>(input[inputIndex + 1]) << 8);
+        put(kBase64Alphabet[(bits >> 18) & 0x3f]);
+        put(kBase64Alphabet[(bits >> 12) & 0x3f]);
+        put(kBase64Alphabet[(bits >> 6) & 0x3f]);
+        if (padFlag)
+            put('=');
+    }
+
+    return checkedLength(resultLength);
+}
+
+int encodeByLine(char* resultString, const char* asciiString, std::size_t asciiStringLength,
+                 bool padFlag)
+{
+    std::size_t inputIndex = 0;
+    std::size_t outputIndex = 0;
+
+    while (inputIndex < asciiStringLength)
+    {
+        const std::size_t lineStart = inputIndex;
+        while (inputIndex < asciiStringLength &&
+               asciiString[inputIndex] != '\r' && asciiString[inputIndex] != '\n')
+        {
+            ++inputIndex;
+        }
+
+        outputIndex += encodeBlock(
+            resultString + outputIndex,
+            reinterpret_cast<const unsigned char*>(asciiString + lineStart),
+            inputIndex - lineStart,
+            kBase64Alphabet,
+            padFlag);
+
+        // Preserve the exact EOL byte sequence, including CRLF and consecutive blank lines.
+        while (inputIndex < asciiStringLength &&
+               (asciiString[inputIndex] == '\r' || asciiString[inputIndex] == '\n'))
+        {
+            resultString[outputIndex++] = asciiString[inputIndex++];
+        }
+    }
+
+    return checkedLength(outputIndex);
+}
+
+int decodeImpl(char* resultString, const char* encodedString, std::size_t encodedStringLength,
+               bool strictFlag, bool whitespaceReset, bool urlSafe)
+{
+    std::size_t index = 0;
+    std::size_t resultLength = 0;
+    int padLength = 0;
+
+    while (index < encodedStringLength)
+    {
+        std::uint32_t bitField = 0;
+        int bitOffset = 18;
+        int charValue = 0;
+        int charIndex = 0;
+
+        while (bitOffset >= 0 && index < encodedStringLength)
+        {
+            charValue = static_cast<unsigned char>(encodedString[index++]);
+            charIndex = decodeValue(static_cast<unsigned char>(charValue), urlSafe);
+
+            if (charIndex >= 0)
+            {
+                if (padLength > 0 && strictFlag)
+                    return -1; // Data after pad character.
+                bitField |= static_cast<std::uint32_t>(charIndex) << bitOffset;
+                bitOffset -= 6;
+            }
+            else if (charIndex == kPadding)
+            {
+                ++padLength;
+                if (strictFlag && bitOffset > 6)
+                    return -2; // Pad character in wrong place.
+            }
+            else if (charIndex == kIllegal || whitespaceReset)
+            {
+                charIndex = kIllegal;
+                break;
+            }
+            // Whitespace is otherwise ignored.
+        }
+
+        if (strictFlag && bitOffset == 12)
+            return -3; // Single-symbol block is invalid.
+
+        const int endOffset = bitOffset + 3;
+        for (int outputOffset = 16; outputOffset > endOffset; outputOffset -= 8)
+            resultString[resultLength++] = static_cast<char>((bitField >> outputOffset) & 0xff);
+
+        if (charIndex == kIllegal)
+        {
+            if (strictFlag)
+                return -4;
+            resultString[resultLength++] = static_cast<char>(charValue);
+        }
+    }
+
+    return checkedLength(resultLength);
+}
+
+} // namespace
+
+int base64Encode(char* resultString, const char* asciiString, std::size_t asciiStringLength,
+                 std::size_t wrapLength, bool padFlag, bool byLineFlag)
+{
+    if (byLineFlag)
+        return encodeByLine(resultString, asciiString, asciiStringLength, false);
+
+    if (wrapLength == 0)
+    {
+        const std::size_t resultLength = encodeBlock(
+            resultString,
+            reinterpret_cast<const unsigned char*>(asciiString),
+            asciiStringLength,
+            kBase64Alphabet,
+            padFlag);
+        return checkedLength(resultLength);
+    }
+
+    return encodeWrapped(resultString, asciiString, asciiStringLength, wrapLength, padFlag);
+}
+
+int base64Decode(char* resultString, const char* encodedString, std::size_t encodedStringLength,
+                 bool strictFlag, bool whitespaceReset)
+{
+    return decodeImpl(resultString, encodedString, encodedStringLength,
+                      strictFlag, whitespaceReset, false);
+}
+
+int base64EncodeWithPaddingByLine(std::string& resultString, const char* asciiString,
+                                  std::size_t asciiStringLength)
+{
+    // Worst case is 4/3 expansion plus the original line endings.
+    resultString.clear();
+    resultString.reserve(((asciiStringLength + 2) / 3) * 4 + asciiStringLength / 32 + 4);
+
+    std::size_t inputIndex = 0;
+    char encoded[4];
+
+    while (inputIndex < asciiStringLength)
+    {
+        const std::size_t lineStart = inputIndex;
+        while (inputIndex < asciiStringLength &&
+               asciiString[inputIndex] != '\r' && asciiString[inputIndex] != '\n')
+        {
+            ++inputIndex;
+        }
+
+        std::size_t lineIndex = lineStart;
+        const std::size_t lineEnd = inputIndex;
+        while (lineIndex < lineEnd)
+        {
+            const std::size_t chunk = (lineEnd - lineIndex >= 3) ? 3 : (lineEnd - lineIndex);
+            const std::size_t produced = encodeBlock(
+                encoded,
+                reinterpret_cast<const unsigned char*>(asciiString + lineIndex),
+                chunk,
+                kBase64Alphabet,
+                true);
+            resultString.append(encoded, produced);
+            lineIndex += chunk;
+        }
+
+        while (inputIndex < asciiStringLength &&
+               (asciiString[inputIndex] == '\r' || asciiString[inputIndex] == '\n'))
+        {
+            resultString.push_back(asciiString[inputIndex++]);
+        }
+    }
+
+    return checkedLength(resultString.size());
+}
+
+int base64UrlEncode(char* resultString, const char* asciiString, std::size_t asciiStringLength)
+{
+    const std::size_t resultLength = encodeBlock(
+        resultString,
+        reinterpret_cast<const unsigned char*>(asciiString),
+        asciiStringLength,
+        kBase64UrlAlphabet,
+        false);
+    return checkedLength(resultLength);
+}
+
+int base64UrlDecode(char* resultString, const char* encodedString, std::size_t encodedStringLength,
+                    bool strictFlag, bool whitespaceReset)
+{
+    return decodeImpl(resultString, encodedString, encodedStringLength,
+                      strictFlag, whitespaceReset, true);
 }

@@ -1,11 +1,6 @@
-name: Build mimeTools
+name: CI_build
 
-on:
-#  push:
-#    branches: [ main, master ]
-#    tags: [ 'v*' ]
-#  pull_request:
-  workflow_dispatch:
+on: [push, pull_request]
 
 jobs:
   build:
@@ -13,9 +8,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_configuration: [Release]
-        build_platform: [x64] # , Win32, ARM64
-        
+        build_configuration: [Release, Debug]
+        build_platform: [x64, Win32, ARM64]
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -27,68 +22,23 @@ jobs:
       working-directory: vs.proj\
       run: msbuild mimeTools.vcxproj /m /p:configuration="${{ matrix.build_configuration }}" /p:platform="${{ matrix.build_platform }}"
 
-    - name: Prepare Artifacts
-      shell: pwsh
-      run: |
-        $dllSrc = switch ("${{ matrix.build_platform }}") {
-            "x64"   { "bin64\mimeTools.dll" }
-            "Win32" { "bin\mimeTools.dll" }
-            "ARM64" { "arm64\mimeTools.dll" }
-        }
-
-        $tagName = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "latest-build" }
-        $archSuffix = if ("${{ matrix.build_platform }}" -eq "Win32") { "x86" } else { "${{ matrix.build_platform }}" }
-        $archiveName = "mimeTools_$($tagName)_$($archSuffix).7z"
-
-        $staging = "staging\mimeTools"
-        New-Item -ItemType Directory -Path $staging -Force | Out-Null
-        Copy-Item $dllSrc -Destination $staging\
-
-        7z a -t7z -mx9 $archiveName "./staging/*"
-
-        echo "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_ENV
-        echo "RELEASE_TAG=$tagName" >> $env:GITHUB_ENV
-
-    - name: Upload to Workflow
+    - name: Archive artifacts for x64
+      if: matrix.build_platform == 'x64' && matrix.build_configuration == 'Release'
       uses: actions/upload-artifact@v4
       with:
-        name: artifacts-${{ matrix.build_platform }}
-        path: ${{ env.ARCHIVE_NAME }}
-        retention-days: 1
+        name: plugin_dll_x64
+        path: bin64\mimeTools.dll
 
-  publish:
-    needs: build
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref_type == 'tag')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: artifacts-*
-          merge-multiple: true
+    - name: Archive artifacts for Win32
+      if: matrix.build_platform == 'Win32' && matrix.build_configuration == 'Release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: plugin_dll_x86
+        path: bin\mimeTools.dll
 
-      - name: Set Release Tag
-        run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "RELEASE_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
-          else
-            echo "RELEASE_TAG=latest-build" >> $GITHUB_ENV
-          fi
-
-      - name: Delete Old Release (Auto-builds only)
-        if: github.ref_type != 'tag'
-        uses: dev-drprasad/delete-tag-and-release@v1.1
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          delete_release: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: "*.7z"
-          generate_release_notes: true
-          prerelease: ${{ github.ref_type != 'tag' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Archive artifacts for ARM64
+      if: matrix.build_platform == 'ARM64' && matrix.build_configuration == 'Release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: plugin_dll_arm64
+        path: arm64\mimeTools.dll

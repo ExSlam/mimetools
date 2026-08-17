@@ -1,221 +1,155 @@
 // This file is part of Notepad++ plugin MIME Tools project
 // Copyright (C)2023 Don HO <don.h@free.fr>
-
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// at your option any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
+// Optimization pass prepared against ExSlam/mimetools master (2e20af5), 2026.
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "qp.h"
-#include <string.h>
 
-char * QuotedPrintable::encode(const char *str) 
+#include <cstring>
+
+char* QuotedPrintable::encode(const char* str)
 {
-	initVar();
-	size_t len = strlen(str);
-	
-	_bufLen = len * 3;
-	size_t nbEOL = _bufLen / QP_ENCODED_LINE_LEN_MAX;
-	_bufLen += nbEOL * 3;
-	_bufLen += 1;
+    return encode(str, std::strlen(str));
+}
 
-	_buffer = new char[_bufLen];
-	memset(_buffer, 0, _bufLen);
-	
-	for (size_t i = 0 ; i < len ; i++)
-	{
-		getQPChar(str[i]);
-		putQPChar();
-	}
-	_buffer[_i] = '\0';
+char* QuotedPrintable::encode(const char* str, std::size_t len)
+{
+    initVar();
 
-	return _buffer;
+    _bufLen = len * 3 + 1;
+    const std::size_t nbEOL = (len * 3) / QP_ENCODED_LINE_LEN_MAX;
+    _bufLen += nbEOL * 3;
+
+    _buffer = new char[_bufLen];
+
+    for (std::size_t i = 0; i < len; ++i)
+    {
+        getQPChar(str[i]);
+        putQPChar();
+    }
+    _buffer[_i] = '\0';
+    return _buffer;
 }
 
 void QuotedPrintable::getQPChar(char c)
 {
-	bool crlf = false;
-	if ((c != '=' && c > 32 && c < 127) || c == ' ' || c == '	' || (UCHAR)c == 0x0D)
-	{
-		_chars[0] = c;
-		_nbChar = 1;
-	}
-	else if ((int)c == 0x0A)
-	{
-		_chars[0] = c;
-		_nbChar = 1;
-		crlf = true;
-	}
-	else
-	{
-		UCHAR uc = (UCHAR)c;
-		_chars[0] = '=';
-		_chars[1] = toChar(uc >> 4);
-		_chars[2] = toChar(uc & 15);
-		_chars[3] = '\0';
-		_nbChar = 3;
-	}
-	
-	if (crlf)
-		_nbCharInLine = _nbChar;
-	else
-		_nbCharInLine += _nbChar;
+    bool crlf = false;
+    const auto uc = static_cast<unsigned char>(c);
 
-	// Lines of Quoted-Printable encoded data must not be longer than 76 characters.
-	// To satisfy this requirement without altering the encoded text, soft line breaks may be added as desired.
-	// A soft line break consists of an = at the end of an encoded line, and does not appear as a line break in the decoded text.
-	// These soft line breaks also allow encoding text without line breaks (or containing very long lines) for an environment where line size is limited,
-	// such as the 1000 characters per line limit of some SMTP software, as allowed by RFC 2821.
-	// ref: https://en.wikipedia.org/wiki/Quoted-printable
-	if (_nbCharInLine >= QP_ENCODED_LINE_LEN_MAX)
-	{
-		_buffer[_i++] = '=';
-		_buffer[_i++] = 0x0D;
-		_buffer[_i++] = 0x0A;
-		_nbCharInLine = _nbChar;
-	}
+    if ((c != '=' && c > 32 && c < 127) || c == ' ' || c == '\t' || uc == 0x0D)
+    {
+        _chars[0] = c;
+        _nbChar = 1;
+    }
+    else if (uc == 0x0A)
+    {
+        _chars[0] = c;
+        _nbChar = 1;
+        crlf = true;
+    }
+    else
+    {
+        _chars[0] = '=';
+        _chars[1] = toChar(uc >> 4);
+        _chars[2] = toChar(uc & 15);
+        _nbChar = 3;
+    }
 
-}
-	
-void QuotedPrintable::putQPChar() 
-{
-	// it happens rarely, but it happens
-	if (_i >= _bufLen)
-	{
-		size_t oldLen = _bufLen;
-		_bufLen *= 2;
-		char *newBuf = new char[_bufLen];
-		
-		for (size_t i = 0 ; i < oldLen ; i++)
-			newBuf[i] = _buffer[i];
+    if (crlf)
+        _nbCharInLine = _nbChar;
+    else
+        _nbCharInLine += _nbChar;
 
-		char *tmp = _buffer;
-		_buffer = newBuf;
-		delete [] tmp;
-	}
-
-	for (int i = 0 ; i < _nbChar ; i++)
-		_buffer[_i++] = _chars[i];
+    if (_nbCharInLine >= QP_ENCODED_LINE_LEN_MAX)
+    {
+        if (_i + 3 >= _bufLen)
+        {
+            const std::size_t oldLen = _bufLen;
+            _bufLen = _bufLen * 2 + 4;
+            char* newBuf = new char[_bufLen];
+            std::memcpy(newBuf, _buffer, oldLen);
+            delete [] _buffer;
+            _buffer = newBuf;
+        }
+        _buffer[_i++] = '=';
+        _buffer[_i++] = '\r';
+        _buffer[_i++] = '\n';
+        _nbCharInLine = _nbChar;
+    }
 }
 
-char * QuotedPrintable::decode(const char *str)
+void QuotedPrintable::putQPChar()
 {
-	initVar();
-	
-	char *p = (char *)str;
-	size_t len = strlen(str);
-	
-	_bufLen = len + 1;
-	_buffer = new char[_bufLen];
-	char* line = new char[_bufLen];
+    if (_i + static_cast<std::size_t>(_nbChar) >= _bufLen)
+    {
+        const std::size_t oldLen = _bufLen;
+        _bufLen = _bufLen * 2 + static_cast<std::size_t>(_nbChar) + 1;
+        char* newBuf = new char[_bufLen];
+        std::memcpy(newBuf, _buffer, oldLen);
+        delete [] _buffer;
+        _buffer = newBuf;
+    }
 
-	while (*p)
-	{
-		if (readQPLine(&p, line) == -1)
-		{
-			delete [] line;
-			return NULL;
-		}
-
-		if (!translate(line))
-		{
-			delete[] line;
-			return NULL;
-		}
-	}
-	_buffer[_i] = '\0';
-	delete[] line;
-	return _buffer;
+    for (int i = 0; i < _nbChar; ++i)
+        _buffer[_i++] = _chars[i];
 }
 
-int QuotedPrintable::readQPLine(char **pStr, char *lineBuf) 
+char* QuotedPrintable::decode(const char* str)
 {
-	size_t len = strlen(*pStr);
-	size_t i = 0;
-	for (; i < len ; i++)
-	{
-		// Make decoding more flexible and less strict (76 characters length of encoded text restriction for decoding is removed).
-		// 
-		// Both following encoded format
-		//  
-		// =D1=80=D0=B5=D0=B3=D0=B8=D1=81=D1=82=D1=80=D0=B8=D1=80=D0=BE=D0=B2=D0=B0=D0=BB=D0=B8=D1=81=D1=8C
-		//
-		// and 
-		// 
-		// =D1=80=D0=B5=D0=B3=D0=B8=D1=81=D1=82=D1=80=D0=B8=D1=80=D0=BE=D0=B2=D0=B0=D0=
-		// =BB=D0=B8=D1=81=D1=8C
-		//
-		// are allowed and the result of both are the same.
-
-		/*
-		if (i >= (QP_ENCODED_LINE_LEN_MAX + 2 + 1)) return -1;
-		*/
-
-		char c = (*pStr)[i];
-		if (c == 0x0D)
-		{
-			lineBuf[i] = c;
-			i++;
-			if ((i >= len) || (i >= (QP_ENCODED_LINE_LEN_MAX + 2 + 1))) return -1;
-			if ((*pStr)[i] != (char)0x0A) return -1;
-			lineBuf[i] = (*pStr)[i];
-			i++;
-			if (i >= (QP_ENCODED_LINE_LEN_MAX + 2 + 1)) return -1;
-			lineBuf[i] = '\0';
-			*pStr += i;
-
-			// Make sure there's no soft line break.
-			if (i >= 3 && lineBuf[i-3] == '=')
-			{
-				lineBuf[i-3] = '\0';
-				return int(i - 3);
-			}
-			return int(i);
-		}
-		else if (c == 0x0A)
-		{
-			return -1;
-		}
-		else
-			lineBuf[i] = c;
-	}
-	*pStr += i;
-	lineBuf[i] = '\0';
-	return int(i);
+    return decode(str, std::strlen(str));
 }
 
-bool QuotedPrintable::translate(char *line2Trans) 
+char* QuotedPrintable::decode(const char* str, std::size_t len)
 {
-	size_t len = strlen(line2Trans);
-	for (size_t i = 0 ; i < len ; i++)
-	{
-		if (line2Trans[i] == '=')
-		{
-			if (i == len || (i + 1) == len|| (i + 2) == len)
-				return false;
-			UCHAR restoredChar;
-			//
-			
-			restoredChar = makeChar(line2Trans[i+1], line2Trans[i+2]);
-			i += 2;
+    initVar();
+    _bufLen = len + 1;
+    _buffer = new char[_bufLen];
 
-			if (!restoredChar)
-				return false;
-			_buffer[_i++] = restoredChar;
-		}
-		else
-		{
-			_buffer[_i++] = line2Trans[i];
-		}
-	}
-	return true;
+    // Single linear pass. The previous implementation repeatedly called strlen()
+    // on the remaining suffix and copied each line into a full-size temporary buffer.
+    for (std::size_t i = 0; i < len; )
+    {
+        const char c = str[i];
+
+        if (c == '=')
+        {
+            // Soft line break: remove =CRLF entirely.
+            if (i + 2 < len && str[i + 1] == '\r' && str[i + 2] == '\n')
+            {
+                i += 3;
+                continue;
+            }
+
+            if (i + 2 >= len)
+                return nullptr;
+
+            unsigned char restored = 0;
+            if (!makeChar(str[i + 1], str[i + 2], restored) || restored == 0)
+                return nullptr; // Preserve the legacy decoder's rejection of =00.
+
+            _buffer[_i++] = static_cast<char>(restored);
+            i += 3;
+            continue;
+        }
+
+        if (c == '\r')
+        {
+            if (i + 1 >= len || str[i + 1] != '\n')
+                return nullptr;
+            _buffer[_i++] = '\r';
+            _buffer[_i++] = '\n';
+            i += 2;
+            continue;
+        }
+
+        // Preserve the existing decoder's requirement that physical newlines are CRLF.
+        if (c == '\n')
+            return nullptr;
+
+        _buffer[_i++] = c;
+        ++i;
+    }
+
+    _buffer[_i] = '\0';
+    return _buffer;
 }
