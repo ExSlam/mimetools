@@ -28,21 +28,15 @@ extern "C" {
 #define TINF_OK             0
 #define TINF_DATA_ERROR    (-3)
 
-/* function prototypes */
+	/* function prototypes used by MIME Tools */
 
-void TINFCC tinf_init();
+	void TINFCC tinf_init();
 
-int TINFCC tinf_uncompress(void *dest, unsigned int *destLen, const void *source);
-
-int TINFCC tinf_gzip_uncompress(void *dest, unsigned int *destLen,
-                                const void *source, unsigned int sourceLen);
-
-int TINFCC tinf_zlib_uncompress(void *dest, unsigned int *destLen,
-                                const void *source, unsigned int sourceLen);
-
-unsigned int TINFCC tinf_adler32(const void *data, unsigned int length);
-
-unsigned int TINFCC tinf_crc32(const void *data, unsigned int length);
+	int TINFCC tinf_uncompress(
+		void* dest,
+		unsigned int* destLen,
+		const void* source
+	);
 
 #ifdef __cplusplus
 } /* extern "C" */

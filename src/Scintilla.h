@@ -15,11 +15,15 @@
 extern "C" {
 #endif
 
-#if defined(_WIN32)
-/* Return false on failure: */
-int Scintilla_RegisterClasses(void *hInstance);
-int Scintilla_ReleaseResources(void);
-#endif
+/*
+* MIME Tools uses the Scintilla control already owned by Notepad++.
+* It does not statically link or initialize Scintilla itself. We don't need the following lines.
+*#if defined(_WIN32)
+* // Return false on failure:
+* int Scintilla_RegisterClasses(void *hInstance);
+* int Scintilla_ReleaseResources(void);
+*#endif
+*/
 
 #ifdef __cplusplus
 }
