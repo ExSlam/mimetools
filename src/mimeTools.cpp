@@ -248,8 +248,8 @@ void urlconvertAsciiToBase64(size_t wrapLength, bool padFlag, bool byLineFlag)
 
 	if (len > 0)
 	{
-		//2.在BASE64的基础上进行一下的编码
-		//2.1 去除尾部的"="
+		//2. Encode based on BASE64 as follows
+		//2.1 Remove the trailing "="
 		if ('=' == encodedText[len - 2])
 		{
 			encodedText[len - 2] = '\0';
@@ -260,8 +260,8 @@ void urlconvertAsciiToBase64(size_t wrapLength, bool padFlag, bool byLineFlag)
 			encodedText[len - 1] = '\0';
 			len = len - 1;
 		}
-		//        2.2)把"+"替换成"-"
-		//  2.3)把"/"替换成"_"
+		// 2.2) Replace "+" with "-"
+		// 2.3) Replace "/" with "_"
 		for (int i = 0; i < len; i++)
 		{
 			if ('+' == encodedText[i])
@@ -367,9 +367,9 @@ void urlconvertBase64ToAscii(bool strictFlag, bool whitespaceReset)
 
 	char* pTmpBuffer = (char*)malloc((selectedLength + 10) * sizeof(char));
 	memcpy(pTmpBuffer, selectedText, selectedLength);
-	//1、把BASE64URL的编码做如下解码
-	// 1)把"-"替换成"+".
-	// 2)把"_"替换成"/" .
+	//1. Decode the BASE64URL encoding as follows:
+	//  1) Replace "-" with "+".
+	//  2) Replace "_" with "/".
 	for (int i = 0; unsigned(i) < selectedLength; i++)
 	{
 		if ('-' == pTmpBuffer[i])
