@@ -29,7 +29,7 @@
 #include "rfc2047.h"
 
 const TCHAR PLUGIN_NAME[] = TEXT("MIME Tools");
-const int nbFunc = 28; 
+const int nbFunc = 30;
 
 HINSTANCE g_hInst = nullptr;
 NppData nppData;
@@ -52,26 +52,28 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			funcItem[5]._pFunc = convertToAsciiFromBase64;
 			funcItem[6]._pFunc = convertToAsciiFromBase64_strict;
 			funcItem[7]._pFunc = convertToAsciiFromBase64_whitespaceReset;
-			funcItem[8]._pFunc = NULL;
-			funcItem[9]._pFunc = convertToQuotedPrintable;
-			funcItem[10]._pFunc = convertToAsciiFromQuotedPrintable;
-			funcItem[11]._pFunc = NULL;
-			funcItem[12]._pFunc = convertMimeHeaderDecode;
+			funcItem[8]._pFunc = convertToBase64FromUtf16Le;
+			funcItem[9]._pFunc = convertToUtf16LeFromBase64;
+			funcItem[10]._pFunc = NULL;
+			funcItem[11]._pFunc = convertToQuotedPrintable;
+			funcItem[12]._pFunc = convertToAsciiFromQuotedPrintable;
 			funcItem[13]._pFunc = NULL;
-			funcItem[14]._pFunc = convertURLMinEncode;
-			funcItem[15]._pFunc = convertURLMinEncodeByLine;
-			funcItem[16]._pFunc = convertURLEncodeExtended;
-			funcItem[17]._pFunc = convertURLEncodeExtendedByLine;
-			funcItem[18]._pFunc = convertURLFullEncode;
-			funcItem[19]._pFunc = convertURLFullEncodeByLine;
-			funcItem[20]._pFunc = convertURLDecode;
-			funcItem[21]._pFunc = NULL;
-			funcItem[22]._pFunc = urlconvertToBase64FromAscii;
-			funcItem[23]._pFunc = urlconvertToAsciiFromBase64;
-			funcItem[24]._pFunc = NULL;
-			funcItem[25]._pFunc = convertSamlDecode;
+			funcItem[14]._pFunc = convertMimeHeaderDecode;
+			funcItem[15]._pFunc = NULL;
+			funcItem[16]._pFunc = convertURLMinEncode;
+			funcItem[17]._pFunc = convertURLMinEncodeByLine;
+			funcItem[18]._pFunc = convertURLEncodeExtended;
+			funcItem[19]._pFunc = convertURLEncodeExtendedByLine;
+			funcItem[20]._pFunc = convertURLFullEncode;
+			funcItem[21]._pFunc = convertURLFullEncodeByLine;
+			funcItem[22]._pFunc = convertURLDecode;
+			funcItem[23]._pFunc = NULL;
+			funcItem[24]._pFunc = urlconvertToBase64FromAscii;
+			funcItem[25]._pFunc = urlconvertToAsciiFromBase64;
 			funcItem[26]._pFunc = NULL;
-			funcItem[27]._pFunc = about;
+			funcItem[27]._pFunc = convertSamlDecode;
+			funcItem[28]._pFunc = NULL;
+			funcItem[29]._pFunc = about;
 			lstrcpy(funcItem[0]._itemName, TEXT("Base64 Encode"));
 			lstrcpy(funcItem[1]._itemName, TEXT("Base64 Encode with padding"));
 			lstrcpy(funcItem[2]._itemName, TEXT("Base64 Encode with padding by line"));
@@ -80,27 +82,28 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			lstrcpy(funcItem[5]._itemName, TEXT("Base64 Decode"));
 			lstrcpy(funcItem[6]._itemName, TEXT("Base64 Decode strict"));
 			lstrcpy(funcItem[7]._itemName, TEXT("Base64 Decode by line"));
-			lstrcpy(funcItem[8]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[9]._itemName, TEXT("Quoted-printable Encode"));
-			lstrcpy(funcItem[10]._itemName, TEXT("Quoted-printable Decode"));
-			lstrcpy(funcItem[11]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[12]._itemName, TEXT("MIME Header Decode (RFC 2047)"));
+			lstrcpy(funcItem[8]._itemName, TEXT("Base64 Encode UTF-16LE (PowerShell)"));
+			lstrcpy(funcItem[9]._itemName, TEXT("Base64 Decode UTF-16LE (PowerShell)"));
+			lstrcpy(funcItem[10]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[11]._itemName, TEXT("Quoted-printable Encode"));
+			lstrcpy(funcItem[12]._itemName, TEXT("Quoted-printable Decode"));
 			lstrcpy(funcItem[13]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[14]._itemName, TEXT("URL Encode (RFC1738)"));
-			lstrcpy(funcItem[15]._itemName, TEXT("URL Encode (RFC1738) by line"));
-			lstrcpy(funcItem[16]._itemName, TEXT("URL Encode (Extended)"));
-			lstrcpy(funcItem[17]._itemName, TEXT("URL Encode (Extended) by line"));
-			lstrcpy(funcItem[18]._itemName, TEXT("URL Encode (Full)"));
-			lstrcpy(funcItem[19]._itemName, TEXT("URL Encode (Full) by line"));
-			lstrcpy(funcItem[20]._itemName, TEXT("URL Decode"));
-			lstrcpy(funcItem[21]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[22]._itemName, TEXT("URL Base64 Encode"));
-			lstrcpy(funcItem[23]._itemName, TEXT("URL Base64 Decode"));
-			lstrcpy(funcItem[24]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[25]._itemName, TEXT("SAML Decode"));
+			lstrcpy(funcItem[14]._itemName, TEXT("MIME Header Decode (RFC 2047)"));
+			lstrcpy(funcItem[15]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[16]._itemName, TEXT("URL Encode (RFC1738)"));
+			lstrcpy(funcItem[17]._itemName, TEXT("URL Encode (RFC1738) by line"));
+			lstrcpy(funcItem[18]._itemName, TEXT("URL Encode (Extended)"));
+			lstrcpy(funcItem[19]._itemName, TEXT("URL Encode (Extended) by line"));
+			lstrcpy(funcItem[20]._itemName, TEXT("URL Encode (Full)"));
+			lstrcpy(funcItem[21]._itemName, TEXT("URL Encode (Full) by line"));
+			lstrcpy(funcItem[22]._itemName, TEXT("URL Decode"));
+			lstrcpy(funcItem[23]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[24]._itemName, TEXT("URL Base64 Encode"));
+			lstrcpy(funcItem[25]._itemName, TEXT("URL Base64 Decode"));
 			lstrcpy(funcItem[26]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[27]._itemName, TEXT("About"));
-
+			lstrcpy(funcItem[27]._itemName, TEXT("SAML Decode"));
+			lstrcpy(funcItem[28]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[29]._itemName, TEXT("About"));
 			for (int i = 0; i < nbFunc; i++)
 			{
 				funcItem[i]._init2Check = false;
@@ -177,7 +180,266 @@ HWND getCurrentScintillaHandle()
 	return (currentEdit == 0)?nppData._scintillaMainHandle:nppData._scintillaSecondHandle;
 };
 
+namespace
+{
+	void showUtf16Base64Error(const TCHAR* message)
+	{
+		::MessageBox(nppData._nppHandle, message, TEXT("Base64 UTF-16LE"), MB_OK | MB_ICONERROR);
+	}
 
+	UINT getDocumentCodePage(HWND hScintilla)
+	{
+		const UINT codePage = static_cast<UINT>(
+			::SendMessage(hScintilla, SCI_GETCODEPAGE, 0, 0));
+		return codePage == 0 ? CP_ACP : codePage;
+	}
+
+	bool getSingleSelection(HWND hScintilla, size_t& start, size_t& end, std::vector<char>& selectedText)
+	{
+		const size_t nbSelections = static_cast<size_t>(
+			::SendMessage(hScintilla, SCI_GETSELECTIONS, 0, 0));
+		if (nbSelections > 1)
+			return false;
+
+		start = static_cast<size_t>(::SendMessage(hScintilla, SCI_GETSELECTIONSTART, 0, 0));
+		end = static_cast<size_t>(::SendMessage(hScintilla, SCI_GETSELECTIONEND, 0, 0));
+		if (end < start)
+		{
+			const size_t tmp = start;
+			start = end;
+			end = tmp;
+		}
+
+		const size_t selectedLength = end - start;
+		if (selectedLength == 0)
+			return false;
+
+		selectedText.resize(selectedLength + 1);
+		::SendMessage(hScintilla, SCI_SETTARGETSTART, start, 0);
+		::SendMessage(hScintilla, SCI_SETTARGETEND, end, 0);
+		::SendMessage(hScintilla, SCI_GETTARGETTEXT, 0,
+			reinterpret_cast<LPARAM>(selectedText.data()));
+		return true;
+	}
+
+	bool documentBytesToUtf16(HWND hScintilla, const char* text, size_t length,
+		std::vector<wchar_t>& utf16)
+	{
+		if (length > static_cast<size_t>(INT_MAX))
+			return false;
+		if (length == 0)
+		{
+			utf16.clear();
+			return true;
+		}
+
+		const UINT codePage = getDocumentCodePage(hScintilla);
+		const DWORD flags = codePage == CP_UTF8 ? MB_ERR_INVALID_CHARS : 0;
+		const int inputLength = static_cast<int>(length);
+		const int utf16Length = ::MultiByteToWideChar(
+			codePage, flags, text, inputLength, nullptr, 0);
+		if (utf16Length <= 0)
+			return false;
+
+		utf16.resize(static_cast<size_t>(utf16Length));
+		return ::MultiByteToWideChar(
+			codePage, flags, text, inputLength, utf16.data(), utf16Length) == utf16Length;
+	}
+
+	bool isValidUtf16(const wchar_t* text, size_t length)
+	{
+		for (size_t i = 0; i < length; ++i)
+		{
+			const unsigned int unit = static_cast<unsigned int>(text[i]);
+			if (unit >= 0xD800 && unit <= 0xDBFF)
+			{
+				if (i + 1 >= length)
+					return false;
+				const unsigned int next = static_cast<unsigned int>(text[++i]);
+				if (next < 0xDC00 || next > 0xDFFF)
+					return false;
+			}
+			else if (unit >= 0xDC00 && unit <= 0xDFFF)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool utf16ToDocumentBytes(HWND hScintilla, const wchar_t* text, size_t length,
+		std::vector<char>& output)
+	{
+		if (length > static_cast<size_t>(INT_MAX))
+			return false;
+		if (length == 0)
+		{
+			output.clear();
+			return true;
+		}
+
+		const UINT codePage = getDocumentCodePage(hScintilla);
+		DWORD flags = 0;
+		BOOL usedDefaultChar = FALSE;
+		LPBOOL usedDefaultCharPtr = nullptr;
+
+		if (codePage == CP_UTF8)
+		{
+			flags = WC_ERR_INVALID_CHARS;
+		}
+		else if (codePage != CP_UTF7 && codePage != 54936)
+		{
+			flags = WC_NO_BEST_FIT_CHARS;
+			usedDefaultCharPtr = &usedDefaultChar;
+		}
+
+		const int inputLength = static_cast<int>(length);
+		const int outputLength = ::WideCharToMultiByte(
+			codePage, flags, text, inputLength, nullptr, 0, nullptr, usedDefaultCharPtr);
+		if (outputLength <= 0 || usedDefaultChar)
+			return false;
+
+		output.resize(static_cast<size_t>(outputLength));
+		usedDefaultChar = FALSE;
+		const int convertedLength = ::WideCharToMultiByte(
+			codePage, flags, text, inputLength, output.data(), outputLength,
+			nullptr, usedDefaultCharPtr);
+		return convertedLength == outputLength && !usedDefaultChar;
+	}
+
+	void replaceSelection(HWND hScintilla, size_t start, size_t end,
+		const char* text, size_t length)
+	{
+		::SendMessage(hScintilla, SCI_SETTARGETSTART, start, 0);
+		::SendMessage(hScintilla, SCI_SETTARGETEND, end, 0);
+		::SendMessage(hScintilla, SCI_REPLACETARGET, static_cast<WPARAM>(length),
+			reinterpret_cast<LPARAM>(text));
+		::SendMessage(hScintilla, SCI_SETSEL, start, start + length);
+	}
+}
+
+void convertToBase64FromUtf16Le()
+{
+	static_assert(sizeof(wchar_t) == 2, "UTF-16LE Base64 requires 16-bit wchar_t on Windows.");
+
+	HWND hCurrScintilla = getCurrentScintillaHandle();
+	size_t start = 0;
+	size_t end = 0;
+	std::vector<char> selectedText;
+	if (!getSingleSelection(hCurrScintilla, start, end, selectedText))
+		return;
+
+	const size_t selectedLength = end - start;
+	std::vector<wchar_t> utf16;
+	if (!documentBytesToUtf16(hCurrScintilla, selectedText.data(), selectedLength, utf16))
+	{
+		showUtf16Base64Error(TEXT("The selected text cannot be converted to UTF-16 without decoding errors."));
+		return;
+	}
+
+	if (utf16.size() > static_cast<size_t>(INT_MAX) / sizeof(wchar_t))
+	{
+		showUtf16Base64Error(TEXT("The selected text is too large to Base64 encode as UTF-16LE."));
+		return;
+	}
+	const size_t utf16ByteLength = utf16.size() * sizeof(wchar_t);
+	const size_t fullGroups = utf16ByteLength / 3;
+	const size_t tailLength = (utf16ByteLength % 3) == 0 ? 0 : 4;
+	if (fullGroups > (static_cast<size_t>(INT_MAX) - tailLength) / 4)
+	{
+		showUtf16Base64Error(TEXT("The selected text is too large to Base64 encode as UTF-16LE."));
+		return;
+	}
+	const size_t encodedLength = fullGroups * 4 + tailLength;
+	std::vector<char> encodedText(encodedLength);
+
+	const int len = base64Encode(
+		encodedText.data(),
+		reinterpret_cast<const char*>(utf16.data()),
+		utf16ByteLength,
+		0,
+		true,
+		false);
+	if (len < 0 || static_cast<size_t>(len) != encodedLength)
+	{
+		showUtf16Base64Error(TEXT("Base64 UTF-16LE encoding failed."));
+		return;
+	}
+
+	replaceSelection(hCurrScintilla, start, end, encodedText.data(), encodedLength);
+}
+
+void convertToUtf16LeFromBase64()
+{
+	static_assert(sizeof(wchar_t) == 2, "UTF-16LE Base64 requires 16-bit wchar_t on Windows.");
+
+	HWND hCurrScintilla = getCurrentScintillaHandle();
+	size_t start = 0;
+	size_t end = 0;
+	std::vector<char> selectedText;
+	if (!getSingleSelection(hCurrScintilla, start, end, selectedText))
+		return;
+
+	const size_t selectedLength = end - start;
+	if (selectedLength > static_cast<size_t>(INT_MAX))
+	{
+		showUtf16Base64Error(TEXT("The selected Base64 text is too large to decode."));
+		return;
+	}
+
+	// Base64 decoding never produces more bytes than its input. Allocate aligned
+	// UTF-16 storage directly so no decoded-byte -> wchar_t copy is required.
+	std::vector<wchar_t> utf16((selectedLength + sizeof(wchar_t) - 1) / sizeof(wchar_t));
+	const int decodedByteLength = base64Decode(
+		reinterpret_cast<char*>(utf16.data()),
+		selectedText.data(),
+		selectedLength,
+		true,
+		false);
+	if (decodedByteLength < 0)
+	{
+		showUtf16Base64Error(TEXT("The selection is not valid Base64."));
+		return;
+	}
+	if ((decodedByteLength % static_cast<int>(sizeof(wchar_t))) != 0)
+	{
+		showUtf16Base64Error(TEXT("Decoded Base64 has an odd byte count and is not valid UTF-16LE."));
+		return;
+	}
+
+	size_t utf16Length = static_cast<size_t>(decodedByteLength) / sizeof(wchar_t);
+	size_t offset = 0;
+	if (utf16Length > 0)
+	{
+		if (utf16[0] == static_cast<wchar_t>(0xFEFF))
+		{
+			offset = 1; // Optional UTF-16LE BOM.
+		}
+		else if (utf16[0] == static_cast<wchar_t>(0xFFFE))
+		{
+			showUtf16Base64Error(TEXT("Decoded data has a UTF-16BE BOM. This command expects UTF-16LE."));
+			return;
+		}
+	}
+
+	const wchar_t* utf16Text = utf16.data() + offset;
+	utf16Length -= offset;
+	if (!isValidUtf16(utf16Text, utf16Length))
+	{
+		showUtf16Base64Error(TEXT("Decoded Base64 contains malformed UTF-16 surrogate pairs."));
+		return;
+	}
+
+	std::vector<char> documentText;
+	if (!utf16ToDocumentBytes(hCurrScintilla, utf16Text, utf16Length, documentText))
+	{
+		showUtf16Base64Error(TEXT("Decoded UTF-16LE text cannot be represented in the current document encoding."));
+		return;
+	}
+
+	replaceSelection(hCurrScintilla, start, end,
+		documentText.empty() ? "" : documentText.data(), documentText.size());
+}
 
 void convertAsciiToBase64(size_t wrapLength, bool padFlag, bool byLineFlag)
 {
