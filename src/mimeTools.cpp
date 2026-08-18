@@ -82,9 +82,9 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			lstrcpy(funcItem[4]._itemName, TEXT("Base64 Encode by line"));
 			lstrcpy(funcItem[5]._itemName, TEXT("Base64 Decode"));
 			lstrcpy(funcItem[6]._itemName, TEXT("Base64 Decode strict"));
-			lstrcpy(funcItem[7]._itemName, TEXT("Base64 Decode by line"));
-			lstrcpy(funcItem[8]._itemName, TEXT("Base64 Encode UTF-16LE (PowerShell)"));
-			lstrcpy(funcItem[9]._itemName, TEXT("Base64 Decode UTF-16LE (PowerShell)"));
+			lstrcpy(funcItem[7]._itemName, TEXT("Base64 Decode by line (padded/unpadded)"));
+			lstrcpy(funcItem[8]._itemName, TEXT("Base64 Encode UTF-16LE"));
+			lstrcpy(funcItem[9]._itemName, TEXT("Base64 Decode UTF-16LE"));
 			lstrcpy(funcItem[10]._itemName, TEXT("-SEPARATOR-"));
 			lstrcpy(funcItem[11]._itemName, TEXT("Quoted-printable Encode"));
 			lstrcpy(funcItem[12]._itemName, TEXT("Quoted-printable Decode"));
