@@ -54,6 +54,7 @@ void convertURLEncodeExtendedByLine();
 void convertURLFullEncodeByLine();
 void convertURLEncode(UrlEncodeMethod method, bool isByLine = false);
 void convertURLDecode();
+void convertSamlEncode();
 void convertSamlDecode();
 void convertURLDecode();
 void about();

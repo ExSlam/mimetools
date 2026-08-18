@@ -32,6 +32,7 @@
     <ClCompile Include="..\src\rfc2047.cpp" />
     <ClCompile Include="..\src\qp.cpp" />
     <ClCompile Include="..\src\saml.cpp" />
+    <ClCompile Include="..\src\tdeflate.cpp" />
     <ClCompile Include="..\src\tinflate.c" />
     <ClCompile Include="..\src\url.cpp" />
   </ItemGroup>
@@ -45,6 +46,7 @@
     <ClInclude Include="..\src\qp.h" />
     <ClInclude Include="..\src\saml.h" />
     <ClInclude Include="..\src\Scintilla.h" />
+    <ClInclude Include="..\src\tdeflate.h" />
     <ClInclude Include="..\src\tinf.h" />
     <ClInclude Include="..\src\url.h" />
   </ItemGroup>

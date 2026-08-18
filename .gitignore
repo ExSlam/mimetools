@@ -19,3 +19,8 @@ vs.proj/ARM64/
 vs.proj/mimeTools.opensdf
 vs.proj/mimeTools.exp
 vs.proj/mimeTools.lib
+vs.proj/mimeTools/
+CppProperties.json
+RCa25572
+.vscode
+.vs

@@ -29,7 +29,7 @@
 #include "rfc2047.h"
 
 const TCHAR PLUGIN_NAME[] = TEXT("MIME Tools");
-const int nbFunc = 30;
+const int nbFunc = 31;
 
 HINSTANCE g_hInst = nullptr;
 NppData nppData;
@@ -71,9 +71,10 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			funcItem[24]._pFunc = urlconvertToBase64FromAscii;
 			funcItem[25]._pFunc = urlconvertToAsciiFromBase64;
 			funcItem[26]._pFunc = NULL;
-			funcItem[27]._pFunc = convertSamlDecode;
-			funcItem[28]._pFunc = NULL;
-			funcItem[29]._pFunc = about;
+			funcItem[27]._pFunc = convertSamlEncode;
+			funcItem[28]._pFunc = convertSamlDecode;
+			funcItem[29]._pFunc = NULL;
+			funcItem[30]._pFunc = about;
 			lstrcpy(funcItem[0]._itemName, TEXT("Base64 Encode"));
 			lstrcpy(funcItem[1]._itemName, TEXT("Base64 Encode with padding"));
 			lstrcpy(funcItem[2]._itemName, TEXT("Base64 Encode with padding by line"));
@@ -101,9 +102,10 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reasonForCall, LPVOID /*lpReserved*/
 			lstrcpy(funcItem[24]._itemName, TEXT("URL Base64 Encode"));
 			lstrcpy(funcItem[25]._itemName, TEXT("URL Base64 Decode"));
 			lstrcpy(funcItem[26]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[27]._itemName, TEXT("SAML Decode"));
-			lstrcpy(funcItem[28]._itemName, TEXT("-SEPARATOR-"));
-			lstrcpy(funcItem[29]._itemName, TEXT("About"));
+			lstrcpy(funcItem[27]._itemName, TEXT("SAML Encode"));
+			lstrcpy(funcItem[28]._itemName, TEXT("SAML Decode"));
+			lstrcpy(funcItem[29]._itemName, TEXT("-SEPARATOR-"));
+			lstrcpy(funcItem[30]._itemName, TEXT("About"));
 			for (int i = 0; i < nbFunc; i++)
 			{
 				funcItem[i]._init2Check = false;
@@ -1094,6 +1096,65 @@ void about()
 	::SendMessage(nppData._nppHandle, NPPM_DARKMODESUBCLASSANDTHEME, static_cast<WPARAM>(NppDarkMode::dmfInit), reinterpret_cast<LPARAM>(g_hAboutDlg));
 
 	::SetWindowPos(g_hAboutDlg, HWND_TOP, x, y, (dlgRect.right - dlgRect.left), (dlgRect.bottom - dlgRect.top), SWP_SHOWWINDOW);
+}
+
+void convertSamlEncode()
+{
+  HWND hCurrScintilla = getCurrentScintillaHandle();
+  size_t nbSelections = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONS, 0, 0);
+  if (nbSelections > 1) return;
+
+  size_t bufLength = ::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, 0);
+  if (bufLength == 0) return;
+
+  char *selectedText = new char[bufLength + 1];
+  ::SendMessage(hCurrScintilla, SCI_GETSELTEXT, 0, (LPARAM)selectedText);
+
+  // Scintilla 5.1.5+ reports selection length without the terminating NUL.
+  // strlen also keeps compatibility with older Scintilla length semantics.
+  const size_t selectedLength = strlen(selectedText);
+  if (selectedLength == 0)
+  {
+    delete [] selectedText;
+    return;
+  }
+
+  std::string samlEncodedText;
+  const int len = samlEncode(samlEncodedText, selectedText, selectedLength);
+
+  switch (len)
+  {
+    case 0:
+      ::MessageBox(nppData._nppHandle, TEXT("SAML Encode returned zero size."), TEXT("SAML Encode"), MB_OK);
+      break;
+    case SAML_ENCODE_ERROR_DEFLATE:
+      ::MessageBox(nppData._nppHandle, TEXT("Could not DEFLATE the selected SAML text."), TEXT("SAML Encode"), MB_OK);
+      break;
+    case SAML_ENCODE_ERROR_BASE64:
+      ::MessageBox(nppData._nppHandle, TEXT("Could not BASE64 Encode the compressed SAML text."), TEXT("SAML Encode"), MB_OK);
+      break;
+    case SAML_ENCODE_ERROR_URLENCODE:
+      ::MessageBox(nppData._nppHandle, TEXT("Could not URL Encode the BASE64 SAML text."), TEXT("SAML Encode"), MB_OK);
+      break;
+    default:
+    {
+      size_t start = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONSTART, 0, 0);
+      size_t end = ::SendMessage(hCurrScintilla, SCI_GETSELECTIONEND, 0, 0);
+      if (end < start)
+      {
+        size_t tmp = start;
+        start = end;
+        end = tmp;
+      }
+      ::SendMessage(hCurrScintilla, SCI_SETTARGETSTART, start, 0);
+      ::SendMessage(hCurrScintilla, SCI_SETTARGETEND, end, 0);
+      ::SendMessage(hCurrScintilla, SCI_REPLACETARGET, len, (LPARAM)samlEncodedText.c_str());
+      ::SendMessage(hCurrScintilla, SCI_SETSEL, start, start + static_cast<size_t>(len));
+      break;
+    }
+  }
+
+  delete [] selectedText;
 }
 
 void convertSamlDecode()

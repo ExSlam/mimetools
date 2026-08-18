@@ -16,15 +16,17 @@
 
 #pragma once
 
-#include "b64.h"
-#include "url.h"
+#include <cstddef>
+#include <string>
 
 constexpr int SAML_DECODE_ERROR_URLDECODE = -1;
 constexpr int SAML_DECODE_ERROR_BASE64DECODE = -2;
 constexpr int SAML_DECODE_ERROR_INFLATE = -3;
-
+constexpr int SAML_ENCODE_ERROR_DEFLATE = -4;
+constexpr int SAML_ENCODE_ERROR_BASE64 = -5;
+constexpr int SAML_ENCODE_ERROR_URLENCODE = -6;
 
 constexpr int SAML_MESSAGE_MAX_SIZE = 200000;
 
+int samlEncode(std::string& dest, const char* samlStr, std::size_t samlLength);
 int samlDecode(char *dest, const char *samlStr, int bufLength);
-

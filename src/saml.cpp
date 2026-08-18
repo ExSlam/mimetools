@@ -18,9 +18,77 @@
 #include "saml.h"
 #include "b64.h"
 #include "url.h"
+#include "tdeflate.h"
 #include "tinf.h"
 
+#include <climits>
 #include <cstring>
+#include <limits>
+#include <utility>
+#include <vector>
+
+
+int samlEncode(std::string& dest, const char* samlStr, std::size_t samlLength)
+{
+  dest.clear();
+
+  if (samlStr == nullptr || samlLength == 0)
+    return 0;
+
+  if (samlLength > static_cast<std::size_t>(SAML_MESSAGE_MAX_SIZE))
+    return SAML_ENCODE_ERROR_DEFLATE;
+
+  std::vector<unsigned char> compressed;
+  if (!tdefl_compress_raw(compressed,
+                          reinterpret_cast<const unsigned char*>(samlStr),
+                          samlLength))
+  {
+    return SAML_ENCODE_ERROR_DEFLATE;
+  }
+
+  if (compressed.size() > std::numeric_limits<std::size_t>::max() - 2)
+    return SAML_ENCODE_ERROR_BASE64;
+
+  const std::size_t base64Groups = (compressed.size() + 2) / 3;
+  if (base64Groups > std::numeric_limits<std::size_t>::max() / 4)
+    return SAML_ENCODE_ERROR_BASE64;
+
+  const std::size_t base64Capacity = base64Groups * 4;
+  if (base64Capacity > static_cast<std::size_t>(INT_MAX))
+    return SAML_ENCODE_ERROR_BASE64;
+
+  std::string base64Text(base64Capacity, '\0');
+  const int base64Length = base64Encode(
+      &base64Text[0],
+      reinterpret_cast<const char*>(compressed.data()),
+      compressed.size(),
+      0,
+      true,
+      false);
+
+  if (base64Length < 0)
+    return SAML_ENCODE_ERROR_BASE64;
+
+  base64Text.resize(static_cast<std::size_t>(base64Length));
+
+  // SAML HTTP-Redirect requires the Base64 value to be URL encoded. Use the
+  // extended encoder so '+' is escaped as %2B instead of being vulnerable to
+  // form/query parsers that interpret '+' as a space.
+  const std::size_t base64Size = base64Text.size();
+  if (base64Size > (static_cast<std::size_t>(INT_MAX) - 1) / 3)
+    return SAML_ENCODE_ERROR_URLENCODE;
+
+  const int urlCapacity = static_cast<int>(base64Size * 3 + 1);
+  std::string urlText(static_cast<std::size_t>(urlCapacity), '\0');
+  const int urlLength = AsciiToUrl(&urlText[0], base64Text.c_str(),
+                                  urlCapacity, UrlEncodeMethod::extended);
+  if (urlLength < 0 || urlLength >= urlCapacity)
+    return SAML_ENCODE_ERROR_URLENCODE;
+
+  urlText.resize(static_cast<std::size_t>(urlLength));
+  dest = std::move(urlText);
+  return urlLength;
+}
 
 
 int samlDecode(char *dest, const char *encodedSamlStr, int bufLength)
