@@ -89,12 +89,12 @@ static void tinf_build_bits_base(unsigned char *bits, unsigned short *base, int 
    for (i = 0; i < delta; ++i)
 	   bits[i] = 0;
    for (i = 0; i < 30 - delta; ++i)
-	   bits[i + delta] = (char)(i / delta);
+	   bits[i + delta] = (unsigned char)(i / delta);
 
    /* build base table */
    for (sum = first, i = 0; i < 30; ++i)
    {
-      base[i] = (char)sum;
+      base[i] = (unsigned short)sum;
       sum += 1 << bits[i];
    }
 }
